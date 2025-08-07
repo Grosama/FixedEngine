@@ -1069,14 +1069,6 @@ namespace FixedEngine.Math
 
         #endregion
 
-        public static UFixed<TUInt, TFrac> Lerp(UFixed<TUInt, TFrac> a, UFixed<TUInt, TFrac> b, UFixed<TUInt, TFrac> t)
-        {
-            // (b - a) * t >> FracBits, puis + a
-            uint diff = b.Raw - a.Raw;
-            uint lerpRaw = a.Raw + (uint)(((ulong)diff * t.Raw) >> UFixed<TUInt, TFrac>.FracBitsConst);
-            return new UFixed<TUInt, TFrac>(lerpRaw);
-        }
-
         /// <summary>
         /// Retourne la différence absolue entre deux UFixed, branchless, sans wrap.
         /// </summary>

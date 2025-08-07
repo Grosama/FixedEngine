@@ -347,7 +347,7 @@ public struct Rect<TInt, TFrac>
     #region --- Transformations, Interpolations & Géométrie avancée ---
 
     // Interpolation linéaire entre deux rectangles (lerp sur min et max)
-    public static Rect<TInt, TFrac> Lerp(Rect<TInt, TFrac> a, Rect<TInt, TFrac> b, Fixed<TInt, TFrac> t)
+    public static Rect<TInt, TFrac> Lerp(Rect<TInt, TFrac> a, Rect<TInt, TFrac> b, UFixed<TInt, TFrac> t)
         => new Rect<TInt, TFrac>(
             Vec2<TInt, TFrac>.Lerp(a.Min, b.Min, t),
             Vec2<TInt, TFrac>.Lerp(a.Max, b.Max, t));
