@@ -5,7 +5,7 @@
 ## ✨ À propos
 
 - **Déterminisme bit-faithful** : arithmétique sans flottant caché, wrap hardware, résultats identiques sur toutes plateformes
-- **Types génériques** : entiers signés/non signés custom (`IntN`, `UIntN`), fixed-point (`Fixed<TInt, TFrac>`, `UFixed<TUInt, TFrac>`) avec précision paramétrable (Q8.8, Q16.8, Q24.8…)
+- **Types génériques** : entiers signés/non signés custom (`IntN`, `UIntN`), fixed-point (`Fixed<TInt, TFrac>`, `UFixed<TUInt, TFrac>`) avec précision paramétrable (Q8.8, Q12.4, Q20.12, Q24.8…)
 - **Structures math 2D** : vecteurs, matrices, transforms compatibles fixed ou int custom
 - **Interopérabilité** : intégré facilement à Unity, MonoGame, Godot, Raylib, et autres
 - **Performance** : zéro allocation, branchless autant que possible, optimal pour la rétro-compatibilité hardware
