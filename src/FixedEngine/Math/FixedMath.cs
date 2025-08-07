@@ -91,6 +91,9 @@ public static class FixedMath
             ? sign * lut[lutIdx]
             : sign * FixedMath.CatmullRom(lut[p0], lut[p1], lut[p2], lut[p3], tQ16);
 
+        // AJOUTE TON LOG ICI
+        if (bits == 8 && uraw == 64)
+            Console.WriteLine($"angle=64: lutIdx={lutIdx}, lutVal={lut[lutIdx]}, sign={sign}, q16_16={q16_16}");
         return Q16_16ToBn(q16_16, bits, signed);
     }
 
@@ -109,9 +112,12 @@ public static class FixedMath
         else
         {
             int max = (1 << bits) - 1;
-            int val = (q16_16 * max + (1 << 15)) >> 16;
-            if (val < 0) val = 0;
-            if (val > max) val = max;
+            int val = (q16_16 * max + (1 << 16)) >> 17;
+            int mask = (1 << bits) - 1;
+            val &= mask;
+            int signBit = 1 << (bits - 1);
+            if ((val & signBit) != 0)
+                val -= (1 << bits);
             return val;
         }
     }
@@ -127,7 +133,8 @@ public static class FixedMath
             throw new NotSupportedException(
                 $"FixedMath.Sin LUT n'est pas défini pour Bn={bits} en unsigned (min = B2).");
 
-        return SinLut4096Core(angle.Raw, UIntN<TBits>.BitsConst, false);
+
+        return SinLut4096Core(angle.Raw, UIntN<TBits>.BitsConst, true);
     }
     #endregion
 

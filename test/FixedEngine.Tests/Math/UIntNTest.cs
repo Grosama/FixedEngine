@@ -521,7 +521,6 @@ namespace FixedEngine.Tests.Math
          * operator <<
          * operator >>
          ==================================*/
-
         #region --- OPÉRATIONS BITWISE (exhaustives, UIntN<B8>) ---
 
         // ──────────────────  &  ──────────────────
@@ -705,7 +704,6 @@ namespace FixedEngine.Tests.Math
          * Gte
          * IsZero
          ==================================*/
-
         #region --- COMPARAISONS (exhaustif, UIntN<B8>) ---
 
         // ───────────── Opérateurs == / != ─────────────
@@ -993,6 +991,104 @@ namespace FixedEngine.Tests.Math
                           new UIntN<B8>(max),
                           offMin, offMax).Raw;
             Assert.That(res, Is.EqualTo(expected));
+        }
+        #endregion
+
+        /*==================================
+         * --- FONCTIONS TRIGONOMETRIQUES ---
+         * Sin
+         * Cos
+         * Tan
+         * Asin
+         * Acos
+         * Atan
+         * Atan2
+         ==================================*/
+        #region --- FONCTIONS TRIGONOMÉTRIQUES (exhaustif, UIntN<B8>) ---
+
+        [TestCase(0, 0)]       // Sin(0°) = 0
+        [TestCase(64, 127)]    // Sin(90°) = +1.0 => 127
+        [TestCase(128, 0)]     // Sin(180°) = 0
+        [TestCase(192, -127)]  
+        public void Sin_UIntN_B8_Approx(int angle, int expected)
+        {
+            var x = new UIntN<B8>((uint)angle);
+            int result = (int)UIntN<B8>.Sin(x);
+            result = HardwareSigned(result, 8); // <-- wrap hardware rétro-faithful
+            Assert.That(result, Is.EqualTo(expected).Within(1));
+        }
+
+        [TestCase(0, 127)]     // Cos(0°) = +1.0
+        [TestCase(64, 0)]      // Cos(90°) = 0
+        [TestCase(128, -128)]  // Cos(180°) = -1.0
+        public void Cos_UIntN_B8_Approx(int angle, int expected)
+        {
+            var x = new UIntN<B8>((uint)angle);
+            int result = (int)UIntN<B8>.Cos(x);
+            result = HardwareSigned(result, 8);
+            Assert.That(result, Is.EqualTo(expected).Within(1));
+        }
+
+        // Pour la tangente, même principe pour le wrap (sauf si tu retournes déjà int32 saturé)
+        [TestCase(0, 0)]      // Tan(0°) = 0
+        [TestCase(64, int.MaxValue)]  // Tan(90°) = inf (handle overflow or saturate)
+        [TestCase(128, 0)]    // Tan(180°) = 0
+        public void Tan_UIntN_B8_Approx(int angle, int expected)
+        {
+            var x = new UIntN<B8>((uint)angle);
+            int result = (int)UIntN<B8>.Tan(x);
+            // Optionnel : wrap si jamais tu satures sur 8 bits. Sinon, laisse tel quel.
+            // result = HardwareSigned(result, 8); // Dé-commente si tu retournes du B8
+            Assert.That(result, Is.EqualTo(expected).Within(1));
+        }
+
+        // Plage UIntN<B8> : 0 = 0.0, 255 = 1.0
+        [TestCase(0, 0)]      // asin(0.0) = 0°
+        [TestCase(127, 45)]   // asin(0.5) ≈ 45°
+        [TestCase(255, 64)]   // asin(1.0) = 90°
+        public void Asin_UIntN_B8_Approx(int val, int expected)
+        {
+            var x = new UIntN<B8>((uint)val);
+            var result = UIntN<B8>.Asin(x);
+            Assert.That(result.Raw, Is.EqualTo(expected).Within(2),
+                $"asin({val}) attendu≈{expected}, obtenu={result.Raw}");
+        }
+
+        // Plage sortie : [64…0]
+        [TestCase(255, 0)]    // acos(1.0) = 0°
+        [TestCase(127, 45)]   // acos(0.5) ≈ 45°
+        [TestCase(0, 64)]     // acos(0.0) = 90°
+        public void Acos_UIntN_B8_Approx(int val, int expected)
+        {
+            var x = new UIntN<B8>((uint)val);
+            var result = UIntN<B8>.Acos(x);
+            Assert.That(result.Raw, Is.EqualTo(expected).Within(2),
+                $"acos({val}) attendu≈{expected}, obtenu={result.Raw}");
+        }
+
+        // atan(0) = 0, atan(255) = 90°
+        [TestCase(0, 0)]      // atan(0.0) = 0°
+        [TestCase(127, 32)]   // atan(127/255) ≈ 26°
+        [TestCase(255, 64)]   // atan(+inf) = 90°
+        public void Atan_UIntN_B8_Approx(int val, int expected)
+        {
+            var x = new UIntN<B8>((uint)val);
+            var result = UIntN<B8>.Atan(x);
+            Assert.That(result.Raw, Is.EqualTo(expected).Within(5),
+                $"atan({val}) attendu≈{expected}, obtenu={result.Raw}");
+        }
+
+        // atan2(y, x), sortie sur [0…127] (0 = 0°, 64 = 90°, 127 = 180°)
+        [TestCase(0, 1, 0)]    // atan2(0, 1) = 0°
+        [TestCase(1, 0, 64)]   // atan2(1, 0) = 90°
+        [TestCase(1, 1, 32)]   // atan2(1, 1) = 45°
+        public void Atan2_UIntN_B8_Approx(int y, int x, int expected)
+        {
+            var a = new UIntN<B8>((uint)y);
+            var b = new UIntN<B8>((uint)x);
+            var result = UIntN<B8>.Atan2(a, b);
+            Assert.That(result.Raw, Is.EqualTo(expected).Within(2),
+                $"atan2({y},{x}) attendu≈{expected}, obtenu={result.Raw}");
         }
         #endregion
 
@@ -1568,6 +1664,17 @@ namespace FixedEngine.Tests.Math
         }
 
         #endregion
+
+        public static int HardwareSigned(int value, int bits)
+        {
+            int mask = (1 << bits) - 1;
+            int raw = value & mask;
+            int signBit = 1 << (bits - 1);
+            if ((raw & signBit) != 0)
+                return raw - (1 << bits);
+            else
+                return raw;
+        }
 
     }
 }
