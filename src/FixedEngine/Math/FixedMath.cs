@@ -41,7 +41,7 @@ public static class FixedMath
     #region --- SIN/COS/TAN LUT Retro ---
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int SinLut4096Core(uint uraw, int bits)
+    private static int SinLut4096Core(uint uraw, int bits, bool signed)
     {
         const int lutBits = 12;
         var lut = SinLUT4096.LUT;
@@ -83,9 +83,37 @@ public static class FixedMath
         int p2 = Math.Min(lutMask, lutIdx + 1);
         int p3 = Math.Min(lutMask, lutIdx + 2);
 
-        return (isRetro == 1)
+        /*return (isRetro == 1)
+            ? sign * lut[lutIdx]
+            : sign * FixedMath.CatmullRom(lut[p0], lut[p1], lut[p2], lut[p3], tQ16);*/
+
+        int q16_16 = (isRetro == 1)
             ? sign * lut[lutIdx]
             : sign * FixedMath.CatmullRom(lut[p0], lut[p1], lut[p2], lut[p3], tQ16);
+
+        return Q16_16ToBn(q16_16, bits, signed);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int Q16_16ToBn(int q16_16, int bits, bool signed)
+    {
+        if (signed)
+        {
+            int max = (1 << (bits - 1)) - 1;
+            int min = -(1 << (bits - 1));
+            int val = (q16_16 * max + (1 << 15)) >> 16;
+            if (val < min) val = min;
+            if (val > max) val = max;
+            return val;
+        }
+        else
+        {
+            int max = (1 << bits) - 1;
+            int val = (q16_16 * max + (1 << 15)) >> 16;
+            if (val < 0) val = 0;
+            if (val > max) val = max;
+            return val;
+        }
     }
 
     //----- SIN -----
@@ -99,9 +127,8 @@ public static class FixedMath
             throw new NotSupportedException(
                 $"FixedMath.Sin LUT n'est pas défini pour Bn={bits} en unsigned (min = B2).");
 
-        return SinLut4096Core(angle.Raw, UIntN<TBits>.BitsConst);
+        return SinLut4096Core(angle.Raw, UIntN<TBits>.BitsConst, false);
     }
-
     #endregion
 
     #region --- SIN (IntN) ---
@@ -116,7 +143,7 @@ public static class FixedMath
                 $"FixedMath.Sin LUT n'est pas défini pour Bn={bits} en signed (seulement B2 à B31 supportés).");
         uint uraw = (uint)raw & ((1u << bits) - 1);
         // PAS DE MULTIPLICATION DU SIGNE ICI !
-        return SinLut4096Core(uraw, bits);
+        return SinLut4096Core(uraw, bits, true);
     }
     #endregion
 
@@ -146,11 +173,11 @@ public static class FixedMath
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int CosCore(uint uraw, int bits)
+    private static int CosCore(uint uraw, int bits, bool signed)
     {
         uint mask = (bits == 32) ? 0xFFFF_FFFFu : ((1u << bits) - 1);
         uint quarter = QuarterTurns[bits];
-        return SinLut4096Core((uraw + quarter) & mask, bits);
+        return SinLut4096Core((uraw + quarter) & mask, bits, signed);
     }
 
 
@@ -163,7 +190,7 @@ public static class FixedMath
         if (bits < 2)
             throw new NotSupportedException($"FixedMath.Cos LUT n'est pas défini pour Bn={bits} en unsigned (min = B2).");
 
-        return CosCore(angle.Raw, bits);
+        return CosCore(angle.Raw, bits, false);
     }
 
     #endregion
@@ -179,7 +206,7 @@ public static class FixedMath
             throw new NotSupportedException($"FixedMath.Cos LUT n'est pas défini pour Bn={bits} en signed (B2..B31).");
 
         uint uraw = (uint)raw & ((1u << bits) - 1); // wrap signed → unsigned
-        return CosCore(uraw, bits);
+        return CosCore(uraw, bits, true);
     }
     #endregion
 
@@ -367,6 +394,75 @@ public static class FixedMath
     // --- ASIN/ACOS LUT Retro ---
     // ==========================
 
+    public static int Q16_16AngleToBn(int q16_16, int bits, bool signed)
+    {
+        // Pour arcsin, arccos, atan : Q16.16 = angle [-π/2, +π/2] (ou [-π, +π] selon la LUT)
+        // Map [-π/2, +π/2] sur [-2^(n-1), 2^(n-1)-1]
+        int max = (1 << (bits - 1)) - 1;
+        int min = -(1 << (bits - 1));
+        int result = (int)(((long)q16_16 * max) / TrigConsts.PI_2_Q[16]);
+        // Clamp
+        if (result < min) result = min;
+        if (result > max) result = max;
+        return result;
+    }
+
+    public static int Q16_16AngleToBn_Atan2(int q16_16, int bits, bool signed)
+    {
+        if (!signed)
+        {
+            int max = (1 << bits) - 1;
+            long mapped = ((long)(q16_16 + TrigConsts.PI_Q[16]) * max) / (TrigConsts.PI_Q[16] * 2);
+            int result = (int)mapped;
+            if (result < 0) result = 0;
+            if (result > max) result = max;
+            return result;
+        }
+        else
+        {
+            int min = -(1 << (bits - 1));
+            int max = (1 << (bits - 1)) - 1;
+            int range = max - min;
+            // Map [–π, +π] sur [–2^(n–1), +2^(n–1)–1]
+            long mapped = ((long)(q16_16 + TrigConsts.PI_Q[16]) * range) / (TrigConsts.PI_Q[16] * 2);
+            int result = (int)(mapped + min);
+            if (result < min) result = min;
+            if (result > max) result = max;
+            return result;
+        }
+    }
+
+    public static int Q16_16AcosToBn(int q16_16, int bits, bool signed)
+    {
+        if (signed)
+        {
+            // Hardware: [0, π] → [–2^(n–1), +2^(n–1)–1]
+            int min = -(1 << (bits - 1));
+            int max = (1 << (bits - 1)) - 1;
+            int range = max - min; // = 2^n – 1
+
+            // Q16.16 [0, π] → [–2^(n–1), +2^(n–1)–1]
+            long mapped = ((long)q16_16 * range + (TrigConsts.PI_Q[16] >> 1)) / TrigConsts.PI_Q[16];
+            int result = (int)(mapped + min);
+
+            // Clamp for security
+            if (result < min) result = min;
+            if (result > max) result = max;
+            return result;
+        }
+        else
+        {
+            // Hardware: [0, π] → [0, 2^n–1]
+            int max = (1 << bits) - 1;
+            long mapped = ((long)q16_16 * max + (TrigConsts.PI_Q[16] >> 1)) / TrigConsts.PI_Q[16];
+            int result = (int)mapped;
+            if (result < 0) result = 0;
+            if (result > max) result = max;
+            return result;
+        }
+    }
+
+
     #region --- ASIN/ACOS Retro ---
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int AsinLut4096Core(int valQ16, int bits)
@@ -412,7 +508,7 @@ public static class FixedMath
         uint maxRaw = (1u << bits) - 1;
         // map [0,max] -> [-65536,+65536]  (rétro-faithful)
         int valQ16 = (int)((((long)v.Raw * 2 - maxRaw) * 65536) / maxRaw);
-        return AsinLut4096Core(valQ16, bits);
+        return Q16_16AngleToBn(AsinLut4096Core(valQ16, bits), bits, false);
     }
     #endregion
 
@@ -429,7 +525,7 @@ public static class FixedMath
             : bits > 17 ? v.Raw >> (bits - 17)      // down-scale
                          : v.Raw << (17 - bits);    // up-scale
 
-        return AsinLut4096Core(valQ16, bits);
+        return Q16_16AngleToBn(AsinLut4096Core(valQ16, bits), bits, true);
     }
     #endregion
 
@@ -444,7 +540,7 @@ public static class FixedMath
 
         uint maxRaw = (1u << fracBits) - 1;
         int valQ16 = (int)((((long)v.Raw * 2 - maxRaw) * 65536) / maxRaw);
-        return AsinLut4096Core(valQ16, fracBits);
+        return Q16_16AngleToBn(AsinLut4096Core(valQ16, fracBits), fracBits, false);
     }
     #endregion
 
@@ -461,7 +557,7 @@ public static class FixedMath
               fracBits == 17 ? v.Raw
             : fracBits > 17 ? v.Raw >> (fracBits - 17)
                              : v.Raw << (17 - fracBits);
-        return AsinLut4096Core(valQ16, fracBits);
+        return Q16_16AngleToBn(AsinLut4096Core(valQ16, fracBits), fracBits, true);
     }
     #endregion
 
@@ -483,7 +579,9 @@ public static class FixedMath
             throw new NotSupportedException($"Acos<UIntN> : B2..B31 requis (bits={bits}).");
         uint maxRaw = (1u << bits) - 1;
         int valQ16 = (int)((((long)v.Raw * 2 - maxRaw) * 65536) / maxRaw);
-        return AcosLut4096Core(valQ16, bits);
+
+
+        return Q16_16AcosToBn(AcosLut4096Core(valQ16, bits), bits, false);
     }
     #endregion
 
@@ -498,7 +596,8 @@ public static class FixedMath
               bits == 17 ? v.Raw
             : bits > 17 ? v.Raw >> (bits - 17)
                         : v.Raw << (17 - bits);
-        return AcosLut4096Core(valQ16, bits);
+
+        return Q16_16AcosToBn(AcosLut4096Core(valQ16, bits), bits, true);
     }
     #endregion
 
@@ -513,7 +612,7 @@ public static class FixedMath
 
         uint maxRaw = (1u << fracBits) - 1;
         int valQ16 = (int)((((long)v.Raw * 2 - maxRaw) * 65536) / maxRaw);
-        return AcosLut4096Core(valQ16, fracBits);
+        return Q16_16AcosToBn(AcosLut4096Core(valQ16, fracBits), fracBits, false);
     }
     #endregion
 
@@ -530,7 +629,7 @@ public static class FixedMath
               fracBits == 17 ? v.Raw
             : fracBits > 17 ? v.Raw >> (fracBits - 17)
                              : v.Raw << (17 - fracBits);
-        return AcosLut4096Core(valQ16, fracBits);
+        return Q16_16AcosToBn(AcosLut4096Core(valQ16, fracBits), fracBits, true);
     }
     #endregion
 
@@ -545,7 +644,7 @@ public static class FixedMath
     // helper sûr
     private static ulong OnePow2(int bits) => (bits == 32) ? 0x1_0000_0000UL : 1UL << bits;
 
-    // x.Raw ∈ [0, 1) en Qm.n (n = bits), aucune conversion destructive
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int AtanLutBitFaithful(int raw, int fracBits)
     {
@@ -555,11 +654,16 @@ public static class FixedMath
 
         if (fracBits < LUT_BITS)
         {
-            idx = (raw << (LUT_BITS - fracBits)) & lutMask;
+            idx = (raw << (LUT_BITS - fracBits));
+            if (idx > lutMask) idx = lutMask;
+            else if (idx < 0) idx = 0;
             return AtanLUT4096.LUT[idx];
         }
 
-        idx = (raw >> (fracBits - LUT_BITS)) & lutMask;
+        idx = (raw >> (fracBits - LUT_BITS));
+        if (idx > lutMask) idx = lutMask;
+        else if (idx < 0) idx = 0;
+
         int interpBits = fracBits - LUT_BITS;
         int interpMask = (1 << interpBits) - 1;
         int fracInterp = (interpBits > 0) ? (raw & interpMask) : 0;
@@ -609,7 +713,9 @@ public static class FixedMath
             throw new NotSupportedException($"Atan UIntN : B2..B31 requis (bits={bits}).");
 
         uint raw = x.Raw;
-        return (raw == 0) ? 0 : AtanCore(raw, bits);
+        int q16_16 =  (raw == 0) ? 0 : AtanCore(raw, bits);
+
+        return Q16_16AngleToBn(q16_16, bits, false);
     }
     #endregion
 
@@ -628,10 +734,58 @@ public static class FixedMath
 
         int sign = (raw < 0) ? -1 : 1;
         uint absRaw = (uint)((raw < 0) ? -raw : raw);
-        return sign * AtanCore(absRaw, bits);
+        int q16_16 = sign * AtanCore(absRaw, bits);
+
+        // Nouvelle ligne : mapping hardware retro
+        return Q16_16AngleToBn(q16_16, bits, true);
     }
 
     #endregion
+
+    /*public static void DumpAtanLUTDebug()
+    {
+        // Tu peux ajuster le pas si tu veux moins d'output
+        for (int raw = -128; raw <= 127; raw++)
+        {
+            var x = new IntN<B8>(raw);
+
+            // 1. Entrée normalisée (amplitude)
+            float amplitude = raw / 127f;
+
+            // 2. Index LUT utilisé (on doit simuler la génération d’index de ta fonction AtanCore)
+            int bits = 8; // pour B8
+            int absRaw = Math.Abs(raw);
+            ulong one = (ulong)(1 << bits); // 256
+
+            int idxLUT;
+            if (absRaw <= (int)one)
+            {
+                // Cas principal de ta fonction AtanCore (sinon tu veux tester le path asymptotique aussi)
+                // Pour ta LUT sur 12 bits :
+                int LUT_BITS = 12, lutMask = (1 << LUT_BITS) - 1;
+                int fracBits = bits;
+                if (fracBits < LUT_BITS)
+                    idxLUT = (absRaw << (LUT_BITS - fracBits)) & lutMask;
+                else
+                    idxLUT = (absRaw >> (fracBits - LUT_BITS)) & lutMask;
+            }
+            else
+            {
+                idxLUT = -1; // Hors plage, path pio2 - AtanLutBitFaithful(...)
+            }
+
+            // 3. Valeur Q16 de la LUT
+            int lutQ16 = (idxLUT >= 0 && idxLUT < AtanLUT4096.LUT.Length) ? AtanLUT4096.LUT[idxLUT] : 0;
+
+            // 4. Conversion angle rétro hardware
+            int q16_16 = (raw == 0) ? 0 : (raw < 0 ? -lutQ16 : lutQ16);
+
+            int b8 = Q16_16AngleToBn(q16_16, bits, true); // bit-faithful
+
+            // 5. Affichage
+            Console.WriteLine($"raw={raw,4}  amp={amplitude,8:F3}  idxLUT={idxLUT,4}  LUT(Q16)={lutQ16,6}  Q16.16={q16_16,6}  B8={b8,4}");
+        }
+    }*/
 
     #region --- ATAN (UFixed) ---
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -643,7 +797,8 @@ public static class FixedMath
 
         if (fracBits < 2)
             throw new NotSupportedException("Atan<UFixed> : TFrac doit être ≥ Q2.");
-        return (raw == 0) ? 0 : AtanCore(raw, fracBits);
+        int q16_16 = (raw == 0) ? 0 : AtanCore(raw, fracBits);
+        return Q16_16AngleToBn(q16_16, fracBits, false);
     }
 
     #endregion
@@ -662,7 +817,8 @@ public static class FixedMath
 
         int sign = (raw < 0) ? -1 : 1;
         uint absRaw = (uint)((raw < 0) ? -raw : raw);
-        return sign * AtanCore(absRaw, fracBits);
+        int q16_16 = sign * AtanCore(absRaw, fracBits);
+        return Q16_16AngleToBn(q16_16, fracBits, false);
     }
     #endregion
 
@@ -696,7 +852,7 @@ public static class FixedMath
             throw new NotSupportedException(
                 $"FixedMath.Atan2 LUT n'est défini que pour B2…B31 en unsigned (bits={bits}).");
 
-        return Atan2Core((int)y.Raw, (int)x.Raw, bits);
+        return Q16_16AngleToBn_Atan2(Atan2Core((int)y.Raw, (int)x.Raw, bits), bits, false);
     }
     #endregion
 
@@ -710,7 +866,7 @@ public static class FixedMath
             throw new NotSupportedException(
                 $"FixedMath.Atan2 LUT n'est défini que pour B2…B31 en signed (bits={bits}).");
 
-        return Atan2Core(y.Raw, x.Raw, bits);
+        return Q16_16AngleToBn_Atan2(Atan2Core(y.Raw, x.Raw, bits), bits, true);
     }
     #endregion
 
@@ -724,7 +880,7 @@ public static class FixedMath
         if (fracBits < 2)
             throw new NotSupportedException("Atan2<UFixed> : TFrac doit être ≥ Q2.");
 
-        return Atan2Core((int)y.Raw, (int)x.Raw, fracBits);
+        return Q16_16AngleToBn_Atan2(Atan2Core((int)y.Raw, (int)x.Raw, fracBits), fracBits, false);
     }
     #endregion
 
@@ -738,7 +894,7 @@ public static class FixedMath
         if (fracBits < 2)
             throw new NotSupportedException("Atan2<Fixed> : TFrac doit être ≥ Q2.");
 
-        return Atan2Core(y.Raw, x.Raw, fracBits);
+        return Q16_16AngleToBn_Atan2(Atan2Core(y.Raw, x.Raw, fracBits), fracBits, true);
     }
     #endregion
 

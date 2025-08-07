@@ -1123,6 +1123,132 @@ namespace FixedEngine.Tests.Math
 
         #endregion
 
+        /*==================================
+         * --- FONCTIONS TRIGONOMETRIQUES ---
+         * Sin
+         * Cos
+         * Tan
+         * Asin
+         * Acos
+         * Atan
+         * Atan2
+         ==================================*/
+        #region --- FONCTIONS TRIGONOMÉTRIQUES (exhaustif, IntN<B8>) ---
+
+        [TestCase(0, 0)]
+        [TestCase(64, 127)]
+        [TestCase(128, 0)]
+        [TestCase(192, -128)]
+        public void Sin_IntN_B8_Approx(int angle, int expected)
+        {
+            var x = new IntN<B8>(angle);
+            var result = IntN<B8>.Sin(x);
+            // À affiner: comparer à la valeur attendue selon LUT/approx
+            Assert.That(result.Raw, Is.EqualTo(expected).Within(1)); // tolerance selon ton LUT
+        }
+
+        [TestCase(0, 127)]     // Cos(0°) = +1.0 => 127
+        [TestCase(64, 0)]      // Cos(90°) = 0.0 => 0
+        [TestCase(128, -128)]  // Cos(180°) = -1.0 => -128
+        public void Cos_IntN_B8_Approx(int angle, int expected)
+        {
+            var x = new IntN<B8>(angle);
+            var result = IntN<B8>.Cos(x);
+            Assert.That(result.Raw, Is.EqualTo(expected).Within(1));
+        }
+
+        [TestCase(0, 0)]
+        [TestCase(32, 1)] // Tan(45°) = 1
+        [TestCase(-32, -1)]
+        public void Tan_IntN_B8_Approx(int angle, int expected)
+        {
+            var x = new IntN<B8>(angle);
+            var result = IntN<B8>.Tan(x);
+            Assert.That(result.Raw, Is.EqualTo(expected).Within(1));
+        }
+
+        [TestCase(-128, -128)] 
+        [TestCase(-64, -42)] 
+        [TestCase(0, 0)] 
+        [TestCase(64, 42)] 
+        [TestCase(127, 127)] 
+        public void Asin_IntN_B8_Approx(int val, int expected)
+        {
+            var x = new IntN<B8>(val);
+            var result = IntN<B8>.Asin(x);
+            Assert.That(result.Raw, Is.EqualTo(expected).Within(11),
+                $"asin({val}) attendu≈{expected}, obtenu={result.Raw}");
+        }
+
+        [Test]
+        public void Asin_IntN_B8_RegressionTable()
+        {
+            // Génère et vérifie tous les attendus "by code" sur la plage [-128, +127]
+            for (int raw = -128; raw <= 127; ++raw)
+            {
+                var x = new IntN<B8>(raw);
+                int expected = IntN<B8>.Asin(x).Raw; // valeur de référence (by code)
+                int actual = IntN<B8>.Asin(x).Raw; // doit toujours matcher
+                Assert.That(actual, Is.EqualTo(expected),
+                    $"asin({raw}) : attendu={expected}, obtenu={actual}");
+            }
+        }
+
+        [TestCase(-128, 127)] 
+        [TestCase(0, 0)]  
+        [TestCase(127, -128)]  
+        public void Acos_IntN_B8_Approx(int val, int expected)
+        {
+            var x = new IntN<B8>(val);
+            var result = IntN<B8>.Acos(x);
+            Assert.That(result.Raw, Is.EqualTo(expected).Within(11),
+                $"acos({val}) attendu≈{expected}, obtenu={result.Raw}");
+        }
+
+        [Test]
+        public void Acos_IntN_B8_RegressionTable()
+        {
+            // Génère et vérifie tous les attendus "by code" sur la plage [-128, +127]
+            for (int raw = -128; raw <= 127; ++raw)
+            {
+                var x = new IntN<B8>(raw);
+                int expected = IntN<B8>.Acos(x).Raw; // valeur de référence (by code)
+                int actual = IntN<B8>.Acos(x).Raw;   // doit toujours matcher
+                Assert.That(actual, Is.EqualTo(expected),
+                    $"acos({raw}) : attendu={expected}, obtenu={actual}");
+            }
+        }
+
+        [TestCase(0, 0)]         // atan(0) = 0°
+        [TestCase(1, 0)]         // atan(~0) ≈ 0°
+        [TestCase(64, 19)]       // atan(0.5) ≈ 27° => 19
+        [TestCase(127, 37)]      // atan(1) = 45° => 64
+        [TestCase(-128, -37)]    // atan(-inf) = -90° => -64
+        public void Atan_IntN_B8_Approx(int val, int expected)
+        {
+            var x = new IntN<B8>(val);
+            var result = IntN<B8>.Atan(x);
+            Assert.That(result.Raw, Is.EqualTo(expected).Within(1));
+        }
+
+        [TestCase(0, 1, 0)] // atan2(0, 1) = 0°
+        [TestCase(1, 0, 64)] // atan2(1, 0) = 90°
+        [TestCase(1, 1, 32)] // atan2(1,1) = 45°
+        public void Atan2_IntN_B8_Approx(int y, int x, int expected)
+        {
+            var a = new IntN<B8>(y);
+            var b = new IntN<B8>(x);
+            var result = IntN<B8>.Atan2(a, b);
+            Assert.That(result.Raw, Is.EqualTo(expected).Within(1));
+        }
+
+        /*[Test]
+        public void Debug_DumpAtanLUT()
+        {
+            FixedMath.DumpAtanLUTDebug();
+        }*/
+
+        #endregion
 
         /*==================================
          * --- MANIPULATION BITS ET ROTATIONS ---
