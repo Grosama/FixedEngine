@@ -526,15 +526,16 @@ namespace FixedEngine.Math
             return new Rect<TInt, TFrac>(new Vec2<TInt, TFrac>(minX, minY), new Vec2<TInt, TFrac>(maxX, maxY));
         }
 
-        public static Mat2x2<TInt, TFrac> Lerp(Mat2x2<TInt, TFrac> a, Mat2x2<TInt, TFrac> b, Fixed<TInt, TFrac> t)
+        public static Mat2x2<TInt, TFrac> Lerp(Mat2x2<TInt, TFrac> a, Mat2x2<TInt, TFrac> b, UFixed<TInt, TFrac> t)
         {
             return new Mat2x2<TInt, TFrac>(
-                Fixed<TInt, TFrac>.Lerp(a.M11, b.M11, t),
-                Fixed<TInt, TFrac>.Lerp(a.M12, b.M12, t),
-                Fixed<TInt, TFrac>.Lerp(a.M21, b.M21, t),
-                Fixed<TInt, TFrac>.Lerp(a.M22, b.M22, t)
+                FixedMath.Lerp(a.M11, b.M11, t),
+                FixedMath.Lerp(a.M12, b.M12, t),
+                FixedMath.Lerp(a.M21, b.M21, t),
+                FixedMath.Lerp(a.M22, b.M22, t)
             );
         }
+
 
         public static Mat2x2<TInt, TFrac> SlerpRotation(Fixed<TInt, TFrac> angleA, Fixed<TInt, TFrac> angleB, Fixed<TInt, TFrac> t)
         {
@@ -542,24 +543,24 @@ namespace FixedEngine.Math
             return Mat2x2<TInt, TFrac>.FromRotation(lerpAngle);
         }
 
-        public static Mat2x2<TInt, TFrac> EaseIn(Mat2x2<TInt, TFrac> a, Mat2x2<TInt, TFrac> b, Fixed<TInt, TFrac> t)
+        public static Mat2x2<TInt, TFrac> EaseIn(Mat2x2<TInt, TFrac> a, Mat2x2<TInt, TFrac> b, UFixed<TInt, TFrac> t)
         {
             var t2 = t * t;
             return Lerp(a, b, t2);
         }
 
-        public static Mat2x2<TInt, TFrac> EaseOut(Mat2x2<TInt, TFrac> a, Mat2x2<TInt, TFrac> b, Fixed<TInt, TFrac> t)
+        public static Mat2x2<TInt, TFrac> EaseOut(Mat2x2<TInt, TFrac> a, Mat2x2<TInt, TFrac> b, UFixed<TInt, TFrac> t)
         {
-            var one = Fixed<TInt, TFrac>.One;
+            var one = UFixed<TInt, TFrac>.One;
             var t2 = one - ((one - t) * (one - t));
             return Lerp(a, b, t2);
         }
 
-        public static Mat2x2<TInt, TFrac> EaseInOut(Mat2x2<TInt, TFrac> a, Mat2x2<TInt, TFrac> b, Fixed<TInt, TFrac> t)
+        public static Mat2x2<TInt, TFrac> EaseInOut(Mat2x2<TInt, TFrac> a, Mat2x2<TInt, TFrac> b, UFixed<TInt, TFrac> t)
         {
-            var one = Fixed<TInt, TFrac>.One;
-            var two = Fixed<TInt, TFrac>.One + Fixed<TInt, TFrac>.One;
-            var ease = t < Fixed<TInt, TFrac>.Half
+            var one = UFixed<TInt, TFrac>.One;
+            var two = UFixed<TInt, TFrac>.One + UFixed<TInt, TFrac>.One;
+            var ease = t < UFixed<TInt, TFrac>.Half
                 ? (two * t * t)
                 : (one - two * (one - t) * (one - t));
             return Lerp(a, b, ease);

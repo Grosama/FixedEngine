@@ -191,10 +191,10 @@ public struct Transform2D<TInt, TFrac>
     }
 
     // Lerp linéaire entre deux transforms
-    public static Transform2D<TInt, TFrac> Lerp(Transform2D<TInt, TFrac> a, Transform2D<TInt, TFrac> b, Fixed<TInt, TFrac> t)
+    public static Transform2D<TInt, TFrac> Lerp(Transform2D<TInt, TFrac> a, Transform2D<TInt, TFrac> b, UFixed<TInt, TFrac> t)
         => new Transform2D<TInt, TFrac>(
             Vec2<TInt, TFrac>.Lerp(a.Position, b.Position, t),
-            Fixed<TInt, TFrac>.Lerp(a.Rotation, b.Rotation, t),
+            FixedMath.Lerp(a.Rotation, b.Rotation, t),
             Vec2<TInt, TFrac>.Lerp(a.Scale, b.Scale, t),
             Vec2<TInt, TFrac>.Lerp(a.Origin, b.Origin, t));
 

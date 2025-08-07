@@ -24,7 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\FixedEngine\FixedEngine.csproj" />
+    <ProjectReference Include="..\..\src\FixedEngine\FixedEngine.csproj" />
   </ItemGroup>
 
   <ItemGroup>

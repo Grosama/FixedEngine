@@ -19,6 +19,9 @@ namespace FixedEngine.Math
         private static readonly int MinConst = Mask.SIGNED_MIN[IntBitsConst];
         private static readonly int MaxConst = Mask.SIGNED_MAX[IntBitsConst];
 
+        public static readonly Fixed<TInt, TFrac> MinValue = new Fixed<TInt, TFrac>(IntN<TInt>.MinValue);
+        public static readonly Fixed<TInt, TFrac> MaxValue = new Fixed<TInt, TFrac>(IntN<TInt>.MaxValue);
+
         public static readonly Fixed<TInt, TFrac> Epsilon = Fixed<TInt, TFrac>.FromRaw(1);
         public static readonly int ByteSize = sizeof(int); // Q8.8, Q16.16, etc.
 
@@ -1199,17 +1202,6 @@ namespace FixedEngine.Math
 
         #endregion
 
-        public static Fixed<TInt, TFrac> Lerp(Fixed<TInt, TFrac> a, Fixed<TInt, TFrac> b, Fixed<TInt, TFrac> t)
-        {
-            // (b - a) * t >> FracBits, puis + a
-            int diff = b.Raw - a.Raw;
-            // Multiplie en long pour éviter l’overflow
-            int lerpRaw = a.Raw + (int)(((long)diff * t.Raw) >> Fixed<TInt, TFrac>.FracBitsConst);
-            return new Fixed<TInt, TFrac>(lerpRaw);
-        }
-
-        public static readonly Fixed<TInt, TFrac> MinValue = new Fixed<TInt, TFrac>(IntN<TInt>.MinValue);
-        public static readonly Fixed<TInt, TFrac> MaxValue = new Fixed<TInt, TFrac>(IntN<TInt>.MaxValue);
 
     }
 

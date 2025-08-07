@@ -215,8 +215,8 @@ namespace FixedEngine.Math
             => (a - b).Magnitude;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static Vec2<TInt, TFrac> Lerp(Vec2<TInt, TFrac> a, Vec2<TInt, TFrac> b, Fixed<TInt, TFrac> t)
-            => a + (b - a) * t;
+        public static Vec2<TInt, TFrac> Lerp(Vec2<TInt, TFrac> a, Vec2<TInt, TFrac> b, UFixed<TInt, TFrac> t)
+            => a + (b - a) * (Fixed<TInt, TFrac>) t;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Vec2<TInt, TFrac> Min(Vec2<TInt, TFrac> a, Vec2<TInt, TFrac> b)

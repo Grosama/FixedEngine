@@ -472,16 +472,16 @@ namespace FixedEngine.Math
         // Lerp linéaire entre deux matrices
         public static UMat2x2<TUInt, TFrac> Lerp(UMat2x2<TUInt, TFrac> a, UMat2x2<TUInt, TFrac> b, UFixed<TUInt, TFrac> t)
             => new UMat2x2<TUInt, TFrac>(
-                UFixed<TUInt, TFrac>.Lerp(a.M11, b.M11, t),
-                UFixed<TUInt, TFrac>.Lerp(a.M12, b.M12, t),
-                UFixed<TUInt, TFrac>.Lerp(a.M21, b.M21, t),
-                UFixed<TUInt, TFrac>.Lerp(a.M22, b.M22, t));
+                FixedMath.Lerp(a.M11, b.M11, t),
+                FixedMath.Lerp(a.M12, b.M12, t),
+                FixedMath.Lerp(a.M21, b.M21, t),
+                FixedMath.Lerp(a.M22, b.M22, t));
 
         // SlerpRotation (pour matrices de rotation : ici, sur unsigned, c’est du Lerp sur angle, wrap safe)
         public static UMat2x2<TUInt, TFrac> SlerpRotation(
             UFixed<TUInt, TFrac> angleA, UFixed<TUInt, TFrac> angleB, UFixed<TUInt, TFrac> t)
         {
-            var angle = UFixed<TUInt, TFrac>.Lerp(angleA, angleB, t);
+            var angle = FixedMath.Lerp(angleA, angleB, t);
             return UMat2x2<TUInt, TFrac>.FromRotation(angle);
         }
 

@@ -16,6 +16,9 @@ namespace FixedEngine.Math
         private static readonly uint ScaleConst = 1u << FracBitsConst;
         private static readonly uint MaxConst = Mask.UNSIGNED_MAX[IntBitsConst];
 
+        public static readonly UFixed<TUInt, TFrac> MinValue = new UFixed<TUInt, TFrac>(UIntN<TUInt>.MinValue);
+        public static readonly UFixed<TUInt, TFrac> MaxValue = new UFixed<TUInt, TFrac>(UIntN<TUInt>.MaxValue);
+
         public static readonly UFixed<TUInt, TFrac> Epsilon = UFixed<TUInt, TFrac>.FromRaw(1u);
         public static readonly int ByteSize = sizeof(uint); // Q8.8, Q16.16, etc.
 
@@ -1073,9 +1076,6 @@ namespace FixedEngine.Math
             uint lerpRaw = a.Raw + (uint)(((ulong)diff * t.Raw) >> UFixed<TUInt, TFrac>.FracBitsConst);
             return new UFixed<TUInt, TFrac>(lerpRaw);
         }
-
-        public static readonly UFixed<TUInt, TFrac> MinValue = new UFixed<TUInt, TFrac>(UIntN<TUInt>.MinValue);
-        public static readonly UFixed<TUInt, TFrac> MaxValue = new UFixed<TUInt, TFrac>(UIntN<TUInt>.MaxValue);
 
         /// <summary>
         /// Retourne la différence absolue entre deux UFixed, branchless, sans wrap.
