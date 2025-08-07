@@ -1,0 +1,72 @@
+# Build results
+bin/
+obj/
+out/
+TestResults/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Mono Auto Generated Files
+mono_crash.*
+
+# Rider
+.idea/
+*.sln.iml
+
+# VS Code
+.vscode/
+.history/
+
+# Dotnet tools
+*.dbmdl
+*.pdb
+
+# Paket dependency manager
+.paket/
+paket-files/
+
+# DotCover
+*.dotCover
+
+# NCrunch
+*.ncrunch*
+_NCrunch_*
+
+# Resharper
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# JetBrains
+*.DotSettings
+
+# StyleCop
+StyleCopReport.xml
+
+# Backup & log files
+*.bak
+*.log
+
+# Others
+*.vspscc
+*.vssscc
+*.tmp
+
+# Local NuGet packages
+*.nupkg
+.nuget/
+.nuget/packages/
+packages/
+
+# Visual Studio 2019/2022 auto generated
+.vs/
+
+# Mac
+.DS_Store
+
+# Windows
+Thumbs.db
