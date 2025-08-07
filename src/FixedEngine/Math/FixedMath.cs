@@ -2,6 +2,8 @@
 using FixedEngine.Math;
 using FixedEngine.Math.Consts;
 using System;
+using System.Diagnostics;
+using System.Drawing;
 using System.Runtime.CompilerServices;
 
 public static class FixedMath
@@ -32,64 +34,6 @@ public static class FixedMath
         return (int)result;
     }
     #endregion
-
-    /*
-    //----- SIN -----
-    //Important, à ne pas effacer
-    #region --- SIN (UIntN) ---
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int Sin<TBits>(UIntN<TBits> angle)
-        where TBits : struct
-    {
-        int bits = UIntN<TBits>.BitsConst;
-
-        // --- GARDE-FOU rétro-faithful ---
-        if (bits < 2)
-            throw new NotSupportedException(
-                $"FixedMath.Sin LUT n'est pas défini pour Bn < 3 (bits={bits}). " +
-                "C'est non significatif pour une table sinus rétro-faithful.");
-
-        uint raw = angle.Raw;
-        const int lutBits = 12;
-        var lut = SinLUT4096.LUT;
-
-        int phaseBits = bits - 2;
-        int phase = (int)(raw & (int)Mask.MASKS[phaseBits]);
-        int phaseMax = (int)Mask.MASKS[phaseBits];
-        int lutMask = (int)Mask.MASKS[lutBits];
-        int lutSize = lutMask + 1;
-        int quadrant = (int)(raw >> (bits - 2)) & (int)Mask.MASKS[2];
-        int sign = ((quadrant & (1 << 1)) == 0) ? 1 : -1; // rétro-faithful
-
-        // BIT-FAITHFUL MODE pour Bn <= 14 (lookup direct)
-        int step = lutSize / (1 << phaseBits);
-        int idx_retro = phase * step;
-
-        // INTERPOLATION Catmull-Rom pour Bn > 14
-        double exactIdx = (double)phase * (lutSize - 1) / phaseMax;
-        int idx_interp = (int)Math.Round(exactIdx);
-        idx_interp = Math.Max(0, Math.Min(lutMask, idx_interp));
-        double fracF = exactIdx - Math.Floor(exactIdx);
-        int tQ16 = (int)Math.Round(fracF * 65536.0);
-
-        int isRetro = (bits <= 14) ? 1 : 0;
-        int idx = isRetro * idx_retro + (1 - isRetro) * idx_interp;
-
-        int lutIdx = ((quadrant & 1) == 0) ? idx : lutMask - idx;
-        lutIdx = Math.Max(0, Math.Min(lutMask, lutIdx));
-
-        int p0 = Math.Max(0, lutIdx - 1);
-        int p1 = lutIdx;
-        int p2 = Math.Min(lutMask, lutIdx + 1);
-        int p3 = Math.Min(lutMask, lutIdx + 2);
-
-        int val = (isRetro == 1)
-            ? lut[lutIdx]
-            : FixedMath.CatmullRom(lut[p0], lut[p1], lut[p2], lut[p3], tQ16);
-
-        return sign * val;
-    }
-    #endregion*/
 
     // ==========================
     // --- SIN/COS/TAN LUT Retro ---
@@ -185,9 +129,9 @@ public static class FixedMath
 
     #region --- SIN (Fixed) ---
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int Sin<TUInt, TFrac>(Fixed<TUInt, TFrac> angle)
-        where TUInt : struct where TFrac : struct
-        => Sin((IntN<TUInt>)angle);
+    public static int Sin<TInt, TFrac>(Fixed<TInt, TFrac> angle)
+        where TInt : struct where TFrac : struct
+            => Sin((IntN<TInt>)angle);
     #endregion
 
     //----- COS -----
@@ -249,9 +193,9 @@ public static class FixedMath
 
     #region --- COS (Fixed) ---
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int Cos<TUInt, TFrac>(Fixed<TUInt, TFrac> angle)
-        where TUInt : struct where TFrac : struct
-        => Cos((IntN<TUInt>)angle);
+    public static int Cos<TInt, TFrac>(Fixed<TInt, TFrac> angle)
+        where TInt : struct where TFrac : struct
+        => Cos((IntN<TInt>)angle);
     #endregion
 
     //----- TAN -----
@@ -333,16 +277,6 @@ public static class FixedMath
             return (int)Math.Max(int.MinValue, Math.Min(int.MaxValue, val64));
         }
     }
-
-
-    /*public static int Tan<TBits>(UIntN<TBits> angle) where TBits : struct
-    {
-        int bits = UIntN<TBits>.BitsConst;
-        uint uraw = bits <= 14
-            ? ((uint)angle.Raw << (14 - bits)) & 0x3FFF
-            : ((uint)angle.Raw >> (bits - 14)) & 0x3FFF;
-        return TanLut4096Core(uraw, bits);
-    }*/
 
     public static int Tan<TBits>(UIntN<TBits> angle)
     where TBits : struct

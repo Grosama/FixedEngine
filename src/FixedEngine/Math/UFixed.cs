@@ -557,6 +557,37 @@ namespace FixedEngine.Math
         #endregion
 
         /*==================================
+         * --- FONCTIONS TRIGONOMETRIQUES ---
+         * Sin
+         * Cos
+         * Tan
+         * Asin
+         * Acos
+         * Atan
+         * Atan2
+         ==================================*/
+        #region --- FONCTIONS TRIGONOMETRIQUES ---
+
+        public static UFixed<TUInt, TFrac> Sin(UFixed<TUInt, TFrac> angle)
+            => new UFixed<TUInt, TFrac>(FixedMath.Sin(angle));
+        public static UFixed<TUInt, TFrac> Cos(UFixed<TUInt, TFrac> angle)
+            => new UFixed<TUInt, TFrac>(FixedMath.Cos(angle));
+        public static UFixed<TUInt, TFrac> Tan(UFixed<TUInt, TFrac> angle)
+            => new UFixed<TUInt, TFrac>(FixedMath.Tan(angle));
+
+        // Inverses
+        public static UFixed<TUInt, TFrac> Asin(UFixed<TUInt, TFrac> val)
+            => new UFixed<TUInt, TFrac>(FixedMath.Asin(val));
+        public static UFixed<TUInt, TFrac> Acos(UFixed<TUInt, TFrac> val)
+            => new UFixed<TUInt, TFrac>(FixedMath.Acos(val));
+        public static UFixed<TUInt, TFrac> Atan(UFixed<TUInt, TFrac> val)
+            => new UFixed<TUInt, TFrac>(FixedMath.Atan(val));
+        public static UFixed<TUInt, TFrac> Atan2(UFixed<TUInt, TFrac> y, UFixed<TUInt, TFrac> x)
+            => new UFixed<TUInt, TFrac>(FixedMath.Atan2(y, x));
+
+        #endregion
+
+        /*==================================
          * --- MANIPULATION BITS ET ROTATIONS ---
          * Reverse
          * PopCount
@@ -1052,5 +1083,7 @@ namespace FixedEngine.Math
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static UFixed<TUInt, TFrac> Delta(UFixed<TUInt, TFrac> a, UFixed<TUInt, TFrac> b)
             => a > b ? a - b : b - a;
+
+
     }
 }

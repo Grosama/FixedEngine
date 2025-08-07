@@ -83,10 +83,9 @@ public struct Transform2D<TInt, TFrac>
     {
         get
         {
-            var cos = new Fixed<TInt, TFrac>(FixedMath.Cos(Rotation));
-            var sin = new Fixed<TInt, TFrac>(FixedMath.Sin(Rotation));
-
-            return new Mat2x2<TInt, TFrac>(
+            var cos = Fixed<TInt, TFrac>.Cos(Rotation);
+            var sin = Fixed<TInt, TFrac>.Sin(Rotation);
+                return new Mat2x2<TInt, TFrac>(
                 cos * Scale.X, -sin * Scale.Y,
                 sin * Scale.X, cos * Scale.Y
             );

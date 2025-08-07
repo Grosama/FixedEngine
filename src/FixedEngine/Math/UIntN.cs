@@ -540,6 +540,37 @@ namespace FixedEngine.Math
         #endregion
 
         /*==================================
+         * --- FONCTIONS TRIGONOMETRIQUES ---
+         * Sin
+         * Cos
+         * Tan
+         * Asin
+         * Acos
+         * Atan
+         * Atan2
+         ==================================*/
+        #region --- FONCTIONS TRIGONOMÉTRIQUES ---
+
+        public static UIntN<TBits> Sin(UIntN<TBits> angle)
+            => new UIntN<TBits>(FixedMath.Sin(angle));
+        public static UIntN<TBits> Cos(UIntN<TBits> angle)
+            => new UIntN<TBits>(FixedMath.Cos(angle));
+        public static UIntN<TBits> Tan(UIntN<TBits> angle)
+            => new UIntN<TBits>(FixedMath.Tan(angle));
+
+        // Fonctions inverses (retournent aussi UIntN, même si en pratique, la sémantique est “binaire d’angle”)
+        public static UIntN<TBits> Asin(UIntN<TBits> val)
+            => new UIntN<TBits>(FixedMath.Asin(val));
+        public static UIntN<TBits> Acos(UIntN<TBits> val)
+            => new UIntN<TBits>(FixedMath.Acos(val));
+        public static UIntN<TBits> Atan(UIntN<TBits> val)
+            => new UIntN<TBits>(FixedMath.Atan(val));
+        public static UIntN<TBits> Atan2(UIntN<TBits> y, UIntN<TBits> x)
+            => new UIntN<TBits>(FixedMath.Atan2(y, x));
+
+        #endregion
+
+        /*==================================
          * --- MANIPULATION BITS ET ROTATIONS ---
          * Reverse
          * PopCount

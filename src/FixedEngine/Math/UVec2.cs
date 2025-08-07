@@ -343,8 +343,8 @@ namespace FixedEngine.Math
         public UVec2<TUInt, TFrac> Rotate(UFixed<TUInt, TFrac> angle)
         {
             // On suppose que UFixedMath.Cos/Sin existent, et que l’angle est en fixed
-            var cos = new UFixed<TUInt, TFrac>(FixedMath.Cos(angle));
-            var sin = new UFixed<TUInt, TFrac>(FixedMath.Sin(angle));
+            var cos = UFixed<TUInt, TFrac>.Cos(angle);
+            var sin = UFixed<TUInt, TFrac>.Sin(angle);
             // Produit vectoriel "classique", wrap unsigned :
             return new UVec2<TUInt, TFrac>(
                 X * cos - Y * sin,
@@ -355,8 +355,8 @@ namespace FixedEngine.Math
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static UVec2<TUInt, TFrac> FromAngle(UFixed<TUInt, TFrac> angle)
         {
-            var cos = new UFixed<TUInt, TFrac>(FixedMath.Cos(angle));
-            var sin = new UFixed<TUInt, TFrac>(FixedMath.Sin(angle));
+            var cos = UFixed<TUInt, TFrac>.Cos(angle);
+            var sin = UFixed<TUInt, TFrac>.Sin(angle);
             return new UVec2<TUInt, TFrac>(cos, sin);
         }
 

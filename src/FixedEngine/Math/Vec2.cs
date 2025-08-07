@@ -284,8 +284,8 @@ namespace FixedEngine.Math
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Vec2<TInt, TFrac> Rotate(Fixed<TInt, TFrac> angle)
         {
-            var cos = new Fixed<TInt, TFrac>(FixedMath.Cos(angle));
-            var sin = new Fixed<TInt, TFrac>(FixedMath.Sin(angle));
+            var cos = Fixed<TInt, TFrac>.Cos(angle);
+            var sin = Fixed<TInt, TFrac>.Sin(angle);
             return new Vec2<TInt, TFrac>(
                 X * cos - Y * sin,
                 X * sin + Y * cos
@@ -295,8 +295,8 @@ namespace FixedEngine.Math
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Vec2<TInt, TFrac> FromAngle(Fixed<TInt, TFrac> angle)
         {
-            var cos = new Fixed<TInt, TFrac>(FixedMath.Cos(angle));
-            var sin = new Fixed<TInt, TFrac>(FixedMath.Sin(angle));
+            var cos = Fixed<TInt, TFrac>.Cos(angle);
+            var sin = Fixed<TInt, TFrac>.Sin(angle);
             return new Vec2<TInt, TFrac>(cos, sin);
         }
 

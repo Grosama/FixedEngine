@@ -232,8 +232,8 @@ namespace FixedEngine.Math
 
         public static Mat2x2<TInt, TFrac> FromRotation(Fixed<TInt, TFrac> angle)
         {
-            var cos = new Fixed<TInt, TFrac>(FixedMath.Cos(angle));
-            var sin = new Fixed<TInt, TFrac>(FixedMath.Sin(angle));
+            var cos = Fixed<TInt, TFrac>.Cos(angle);
+            var sin = Fixed<TInt, TFrac>.Sin(angle);
             return new Mat2x2<TInt, TFrac>(
                 cos, -sin,
                 sin, cos
