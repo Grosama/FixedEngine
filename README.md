@@ -23,6 +23,6 @@ Voir [`UNLICENSED.md`](UNLICENSED.md) pour le détail.
 - `IntN<TBits>`, `UIntN<TBits>` : entiers wrap/sign-extend hardware, conversion branchless, conversions hex/bin
 - `Fixed<TInt, TFrac>`, `UFixed<TUInt, TFrac>` : fixed-point Q-format, arithmétique optimisée, conversions rétro, LUTs optionnelles
 - Structures mathématiques 2D : `Vec2`, `Mat2x2`, `Transform2D`, versions signed/unsigned
-- Sérialisation/Parsing : JSON, binaire, hexadécimal, formats méta (tooling, netcode, save)
-- Tests unitaires exhaustifs
+- Sérialisation/Parsing : JSON, binaire, hexadécimal, formats méta (tooling, netcode, save) à venir
+- Tests unitaires exhaustifs à venir
 
