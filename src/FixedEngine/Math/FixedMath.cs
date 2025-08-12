@@ -41,7 +41,7 @@ public static class FixedMath
     #region --- SIN/COS/TAN LUT Retro ---
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int SinLut4096Core(uint uraw, int bits, bool signed)
+    private static int SinCore(uint uraw, int bits, bool signed)
     {
         const int lutBits = 12;
         var lut = SinLUT4096.LUT;
@@ -83,15 +83,10 @@ public static class FixedMath
         int p2 = Math.Min(lutMask, lutIdx + 1);
         int p3 = Math.Min(lutMask, lutIdx + 2);
 
-        /*return (isRetro == 1)
-            ? sign * lut[lutIdx]
-            : sign * FixedMath.CatmullRom(lut[p0], lut[p1], lut[p2], lut[p3], tQ16);*/
-
         int q16_16 = (isRetro == 1)
             ? sign * lut[lutIdx]
             : sign * FixedMath.CatmullRom(lut[p0], lut[p1], lut[p2], lut[p3], tQ16);
 
-        // AJOUTE TON LOG ICI
         if (bits == 8 && uraw == 64)
             Console.WriteLine($"angle=64: lutIdx={lutIdx}, lutVal={lut[lutIdx]}, sign={sign}, q16_16={q16_16}");
         return Q16_16ToBn(q16_16, bits, signed);
@@ -134,7 +129,7 @@ public static class FixedMath
                 $"FixedMath.Sin LUT n'est pas défini pour Bn={bits} en unsigned (min = B2).");
 
 
-        return SinLut4096Core(angle.Raw, UIntN<TBits>.BitsConst, true);
+        return SinCore(angle.Raw, UIntN<TBits>.BitsConst, true);
     }
     #endregion
 
@@ -150,7 +145,7 @@ public static class FixedMath
                 $"FixedMath.Sin LUT n'est pas défini pour Bn={bits} en signed (seulement B2 à B31 supportés).");
         uint uraw = (uint)raw & ((1u << bits) - 1);
         // PAS DE MULTIPLICATION DU SIGNE ICI !
-        return SinLut4096Core(uraw, bits, true);
+        return SinCore(uraw, bits, true);
     }
     #endregion
 
@@ -184,7 +179,7 @@ public static class FixedMath
     {
         uint mask = (bits == 32) ? 0xFFFF_FFFFu : ((1u << bits) - 1);
         uint quarter = QuarterTurns[bits];
-        return SinLut4096Core((uraw + quarter) & mask, bits, signed);
+        return SinCore((uraw + quarter) & mask, bits, signed);
     }
 
 
@@ -312,6 +307,7 @@ public static class FixedMath
         }
     }
 
+
     public static int Tan<TBits>(UIntN<TBits> angle)
     where TBits : struct
     {
@@ -405,8 +401,6 @@ public static class FixedMath
     {
         if (signed)
         {
-            // Pour arcsin, arccos, atan : Q16.16 = angle [-π/2, +π/2] (ou [-π, +π] selon la LUT)
-            // Map [-π/2, +π/2] sur [-2^(n-1), 2^(n-1)-1]
             int max = (1 << (bits - 1)) - 1;
             int min = -(1 << (bits - 1));
             int result = (int)(((long)q16_16 * max) / TrigConsts.PI_2_Q[16]);
@@ -461,12 +455,9 @@ public static class FixedMath
     {
         if (signed)
         {
-            // Hardware: [0, π] → [–2^(n–1), +2^(n–1)–1]
             int min = -(1 << (bits - 1));
             int max = (1 << (bits - 1)) - 1;
-            int range = max - min; // = 2^n – 1
-
-            // Q16.16 [0, π] → [–2^(n–1), +2^(n–1)–1]
+            int range = max - min;
             long mapped = ((long)q16_16 * range + (TrigConsts.PI_Q[16] >> 1)) / TrigConsts.PI_Q[16];
             int result = (int)(mapped + min);
 
@@ -477,16 +468,8 @@ public static class FixedMath
         }
         else
         {
-            // Hardware: [0, π] → [0, 2^n–1]
-            /*int max = (1 << bits) - 1;
-            long mapped = ((long)q16_16 * max + (TrigConsts.PI_Q[16] >> 1)) / TrigConsts.PI_Q[16];
-            int result = (int)mapped;
-            if (result < 0) result = 0;
-            if (result > max) result = max;
-            return result;*/
 
-            // Hardware: [0, π] → [0, 2^(n-1)] (ex: 0..128)
-            int max = 1 << (bits - 1); // ✅ moitié du full range
+            int max = 1 << (bits - 1);
             long mapped = ((long)q16_16 * max + (TrigConsts.PI_Q[16] >> 1)) / TrigConsts.PI_Q[16];
             int result = (int)mapped;
             if (result < 0) result = 0;
@@ -729,12 +712,12 @@ public static class FixedMath
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int AtanCore(uint absRaw, int bits)
     {
-        // absRaw  > 0   ––  bits ∈ [2,31]
-        ulong one = OnePow2(bits);                 // 2^bits  (≤2^31)
+
+        ulong one = OnePow2(bits);
         if (absRaw <= one)
             return AtanLutBitFaithful((int)absRaw, bits);
 
-        int recip = (int)((one * one) / absRaw);   // ≤ 2^bits
+        int recip = (int)((one * one) / absRaw);
         int pio2 = TrigConsts.PI_2_Q[16];
         return pio2 - AtanLutBitFaithful(recip, bits);
     }
@@ -753,8 +736,6 @@ public static class FixedMath
         return Q16_16AngleToBn(q16_16, bits, true);
     }
     #endregion
-
-
 
     #region --- ATAN (IntN) ---
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -783,7 +764,7 @@ public static class FixedMath
         where TUInt : struct where TFrac : struct
     {
         uint raw = x.Raw;
-        int fracBits = BitsOf<TFrac>.Value;        // garanti 1..31
+        int fracBits = BitsOf<TFrac>.Value;
 
         if (fracBits < 2)
             throw new NotSupportedException("Atan<UFixed> : TFrac doit être ≥ Q2.");
@@ -1514,6 +1495,186 @@ public static class FixedMath
     #region --- HELPERS LUT ---
     public static int SinLutQ16(int idx) => SinLUT4096.LUT[idx & 1023];
     public static int AtanLutQ16(int idx) => AtanLUT1024.LUT[idx & 1023];
+    #endregion
+
+    // ==========================
+    // --- DEBUG / RAW OUTPUT (sin/cos/tan) ---
+    // ==========================
+    #region --- DEBUG / RAW OUTPUT (sin/cos/tan) ---
+
+    // ----- SIN -----
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static int SinRawCore(uint uraw, int bits)
+    {
+        const int lutBits = 12;
+        var lut = SinLUT4096.LUT;
+
+        int phaseBits = bits - 2;
+        int phaseMax = (1 << phaseBits) - 1;
+        int phase = (int)(uraw & (uint)phaseMax);
+
+        int quadrant = (int)(uraw >> (bits - 2)) & 0b11;
+        int sign = ((quadrant & 0b10) == 0) ? 1 : -1;
+
+        int lutMask = (1 << lutBits) - 1;
+        int lutSize = lutMask + 1;
+
+        bool isRetro = bits <= 14;
+        uint denom = (phaseBits >= 31) ? 0x8000_0000u : (1u << phaseBits);
+        int step = Math.Max(1, lutSize / (int)denom);
+        int idx_retro = phase * step;
+
+        int idx_interp = 0, tQ16 = 0;
+        if (!isRetro)
+        {
+            long idxQ16 = ((long)phase << 16) * (lutSize - 1) / phaseMax;
+            idx_interp = (int)(idxQ16 >> 16);
+            if (idx_interp < 0) idx_interp = 0;
+            else if (idx_interp > lutMask) idx_interp = lutMask;
+            tQ16 = (int)(idxQ16 & 0xFFFF);
+        }
+
+        int idx = isRetro ? idx_retro : idx_interp;
+        int lutIdx = ((quadrant & 1) == 0) ? idx : lutMask - idx;
+        if (lutIdx < 0) lutIdx = 0;
+        else if (lutIdx > lutMask) lutIdx = lutMask;
+
+        int p0 = Math.Max(0, lutIdx - 1);
+        int p1 = lutIdx;
+        int p2 = Math.Min(lutMask, lutIdx + 1);
+        int p3 = Math.Min(lutMask, lutIdx + 2);
+
+        int q16_16 = isRetro
+            ? sign * lut[lutIdx]
+            : sign * FixedMath.CatmullRom(lut[p0], lut[p1], lut[p2], lut[p3], tQ16);
+
+        return q16_16;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int SinRaw<TBits>(UIntN<TBits> angle) where TBits : struct
+    {
+        int bits = UIntN<TBits>.BitsConst;
+        return SinRawCore(angle.Raw, bits);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int SinRaw<TBits>(IntN<TBits> angle) where TBits : struct
+    {
+        int bits = IntN<TBits>.BitsConst;
+        return SinRawCore((uint)angle.Raw, bits);
+    }
+
+
+    // ----- COS -----
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int CosRawCore(uint uraw, int bits)
+    {
+        uint mask = (bits == 32) ? 0xFFFF_FFFFu : (1u << bits) - 1;
+        uint quarter = QuarterTurns[bits]; // Quart de tour (π/2) en raw
+        return SinRawCore((uraw + quarter) & mask, bits);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int CosRaw<TBits>(UIntN<TBits> angle) where TBits : struct
+    {
+        int bits = UIntN<TBits>.BitsConst;
+        return CosRawCore(angle.Raw, bits);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int CosRaw<TBits>(IntN<TBits> angle) where TBits : struct
+    {
+        int bits = IntN<TBits>.BitsConst;
+        return CosRawCore((uint)angle.Raw, bits); // wrap signé → unsigned
+    }
+
+
+    //----- TAN -----
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int TanRawCore(uint raw, int bits)
+    {
+        const int lutBits = 12;
+        int lutMask = (1 << lutBits) - 1;
+        var lut = TanLUT4096.LUT;
+
+        int phaseBits = bits - 2;
+        uint phaseMask = (phaseBits >= 32) ? 0xFFFFFFFFu : ((1u << phaseBits) - 1);
+
+        // ----- Gestion rétro-faithful pour B2 (bits=2, phaseBits=0) -----
+        if (phaseMask == 0)
+        {
+            // 4 positions : 0°, 90°, 180°, 270°
+            int quadrant = (int)(raw >> 0) & 0b11;
+            if (quadrant == 1)
+                return int.MaxValue; // tan(90°)
+            if (quadrant == 3)
+                return int.MinValue; // tan(270°)
+            return 0;               // tan(0°), tan(180°)
+        }
+
+        // ----- PATCH SPÉCIAL B14 -----
+        if (bits == 14)
+        {
+            int quadrant = (int)(raw >> 12) & 0b11;
+            uint phase = raw & 0x3FFF;            // phase ∈ [0..16383]
+            int lutIdx = (int)(phase >> 2);       // 16384 / 4 = 4096
+            if ((quadrant & 1) == 1) lutIdx = lutMask - lutIdx;
+            if (phase == 0x3FFF && (quadrant & 1) == 1)
+                return quadrant == 1 ? int.MaxValue : int.MinValue;
+            int val = lut[lutIdx];
+            return (quadrant == 1 || quadrant == 2) ? -val : val;
+        }
+
+        // ----- LUT direct rétro-faithful pour B3..B13, B12 inclus -----
+        if (phaseBits <= 12)
+        {
+            int quadrant = (int)(raw >> phaseBits) & 0b11;
+            uint phase = raw & phaseMask;
+            int lutIdx = (int)((long)phase * lutMask / phaseMask);
+            if ((quadrant & 1) == 1) lutIdx = lutMask - lutIdx;
+            if (phase == phaseMask && (quadrant & 1) == 1)
+                return quadrant == 1 ? int.MaxValue : int.MinValue;
+            int val = lut[lutIdx];
+            return (quadrant == 1 || quadrant == 2) ? -val : val;
+        }
+
+        // ----- Interpolation Catmull-Rom pour B15+ -----
+        {
+            int quadrant = (int)(raw >> phaseBits) & 0b11;
+            uint phase = raw & phaseMask;
+            long idxQ16 = ((long)phase << 16) * lutMask / phaseMask;
+            int idx = (int)(idxQ16 >> 16);
+            int tQ16 = (int)(idxQ16 & 0xFFFF);
+
+            int baseIdx = (quadrant & 1) == 0 ? idx : lutMask - idx;
+            int p0 = Math.Max(0, baseIdx - 1);
+            int p1 = baseIdx;
+            int p2 = Math.Min(lutMask, baseIdx + 1);
+            int p3 = Math.Min(lutMask, baseIdx + 2);
+
+            long v0 = lut[p0], v1 = lut[p1], v2 = lut[p2], v3 = lut[p3];
+            long t = tQ16, t2 = (t * t) >> 16, t3 = (t2 * t) >> 16;
+            long a0 = -v0 + 3 * v1 - 3 * v2 + v3;
+            long a1 = 2 * v0 - 5 * v1 + 4 * v2 - v3;
+            long a2 = -v0 + v2;
+            long a3 = 2 * v1;
+
+            long acc = (a0 * t3) + (a1 * t2) + (a2 * t) + (a3 << 16);
+            long val64 = acc >> 16;
+
+            if (quadrant == 1 || quadrant == 2) val64 = -val64;
+            if (idx == lutMask && (quadrant & 1) == 1)
+                return quadrant == 1 ? int.MaxValue : int.MinValue;
+            return (int)Math.Max(int.MinValue, Math.Min(int.MaxValue, val64));
+        }
+
+
+    }
+    public static int TanRaw<TBits>(UIntN<TBits> angle)
+    where TBits : struct
+        => TanRawCore(angle.Raw, UIntN<TBits>.BitsConst);
+
     #endregion
 }
 

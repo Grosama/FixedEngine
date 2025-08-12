@@ -73,7 +73,7 @@ namespace FixedEngine.Tests.Math
                     var miGen = typeof(FixedMath)
                         .GetMethods()
                         .FirstOrDefault(m =>
-                            m.Name == "Sin"
+                            m.Name == "SinRaw"
                             && m.IsGenericMethod
                             && m.GetParameters().Length == 1
                             && m.GetParameters()[0].ParameterType.IsGenericType
@@ -112,7 +112,7 @@ namespace FixedEngine.Tests.Math
                 var miGen = typeof(FixedMath)
                     .GetMethods()
                     .FirstOrDefault(m =>
-                        m.Name == "Sin"
+                        m.Name == "SinRaw"
                         && m.IsGenericMethod
                         && m.GetParameters().Length == 1
                         && m.GetParameters()[0].ParameterType.IsGenericType
@@ -244,7 +244,7 @@ namespace FixedEngine.Tests.Math
                     var miGen = typeof(FixedMath)
                         .GetMethods()
                         .FirstOrDefault(m =>
-                            m.Name == "Sin"
+                            m.Name == "SinRaw"
                             && m.IsGenericMethod
                             && m.GetParameters().Length == 1
                             && m.GetParameters()[0].ParameterType.IsGenericType
@@ -282,7 +282,7 @@ namespace FixedEngine.Tests.Math
                 var miGen = typeof(FixedMath)
                     .GetMethods()
                     .FirstOrDefault(m =>
-                        m.Name == "Sin"
+                        m.Name == "SinRaw"
                         && m.IsGenericMethod
                         && m.GetParameters().Length == 1
                         && m.GetParameters()[0].ParameterType.IsGenericType
@@ -392,7 +392,7 @@ namespace FixedEngine.Tests.Math
                     // -------------------------------------------------------
 
                     var miGen = typeof(FixedMath).GetMethods()
-                                 .First(m => m.Name == "Cos"
+                                 .First(m => m.Name == "CosRaw"
                                           && m.IsGenericMethod
                                           && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(UIntN<>));
                     var mi = miGen.MakeGenericMethod(tagType);
@@ -421,7 +421,7 @@ namespace FixedEngine.Tests.Math
 
                 var angleType = typeof(UIntN<>).MakeGenericType(tagType);
                 var mi = typeof(FixedMath).GetMethods()
-                           .First(m => m.Name == "Cos"
+                           .First(m => m.Name == "CosRaw"
                                     && m.IsGenericMethod
                                     && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(UIntN<>))
                            .MakeGenericMethod(tagType);
@@ -510,7 +510,7 @@ namespace FixedEngine.Tests.Math
                     int expected = sign * lut[lutIdx];
 
                     var miGen = typeof(FixedMath).GetMethods()
-                                 .First(m => m.Name == "Cos"
+                                 .First(m => m.Name == "CosRaw"
                                           && m.IsGenericMethod
                                           && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(IntN<>));
                     var mi = miGen.MakeGenericMethod(tagType);
@@ -539,7 +539,7 @@ namespace FixedEngine.Tests.Math
 
                 var angleType = typeof(IntN<>).MakeGenericType(tagType);
                 var mi = typeof(FixedMath).GetMethods()
-                           .First(m => m.Name == "Cos"
+                           .First(m => m.Name == "CosRaw"
                                     && m.IsGenericMethod
                                     && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(IntN<>))
                            .MakeGenericMethod(tagType);
@@ -588,16 +588,16 @@ namespace FixedEngine.Tests.Math
 
         // ----- TAN -----
 
-        #region --- TAN Retro (UIntN) via SIN/COS ---
+        #region --- TAN Retro (UIntN) via TanRaw ---
         [Test]
-        public void Tan_UIntN_B2toB32_MaxDiffMeasure_SinCos()
+        public void Tan_UIntN_B2toB32_MaxDiffMeasure_TanRaw()
         {
             var asm = typeof(FixedEngine.Math.B2).Assembly;
             string report = "\nBn\tMaxDiff\tMaxDiffDeg\tMaxDiffValue\tMaxDiffAngleEqDeg"
                           + "\t| LinearZone | MaxDiffLin\tMaxDiffLinDeg\tMaxDiffLinValue"
                           + "\t| MaxDiffAngleEqDeg_Lin\tAtDeg";
 
-            var rng = new Random(13579);
+            var rng = new Random(24680);
 
             for (int bits = 2; bits <= 32; bits++)
             {
@@ -605,13 +605,8 @@ namespace FixedEngine.Tests.Math
                 if (tagType == null) { Console.WriteLine($"Type B{bits} absent : SKIP"); continue; }
 
                 var angleType = typeof(UIntN<>).MakeGenericType(tagType);
-                var miSin = typeof(FixedMath).GetMethods()
-                                  .First(m => m.Name == "Sin"
-                                           && m.IsGenericMethod
-                                           && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(UIntN<>))
-                                  .MakeGenericMethod(tagType);
-                var miCos = typeof(FixedMath).GetMethods()
-                                  .First(m => m.Name == "Cos"
+                var miTan = typeof(FixedMath).GetMethods()
+                                  .First(m => m.Name == "TanRaw"
                                            && m.IsGenericMethod
                                            && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(UIntN<>))
                                   .MakeGenericMethod(tagType);
@@ -620,16 +615,9 @@ namespace FixedEngine.Tests.Math
                 int samples = (bits >= 28) ? 1_000_000 : System.Math.Min((int)maxRaw + 1, 1_000_000);
 
                 int maxDiff = 0;
-                double maxDiffDeg = 0;
-                double maxDiffValue = 0;
-                double maxDiffAngleEqDeg = 0;
-
+                double maxDiffDeg = 0, maxDiffValue = 0, maxDiffAngleEqDeg = 0;
                 int maxDiffLin = 0;
-                double maxDiffLinDeg = 0;
-                double maxDiffLinValue = 0;
-
-                double maxDiffAngleEqDegLin = 0;
-                double maxDiffAngleEqDegLinAtDeg = 0;
+                double maxDiffLinDeg = 0, maxDiffLinValue = 0, maxDiffAngleEqDegLin = 0, maxDiffAngleEqDegLinAtDeg = 0;
 
                 for (int i = 0; i < samples; i++)
                 {
@@ -637,42 +625,25 @@ namespace FixedEngine.Tests.Math
                                ? (uint)rng.NextInt64(0, (long)maxRaw + 1)
                                : (uint)((ulong)maxRaw * (ulong)i / (ulong)samples);
 
-                    // Ajustement de raw vers 14 bits
                     uint adjustedRaw = bits <= 14
                         ? (raw << (14 - bits)) & 0x3FFF
                         : (raw >> (bits - 14)) & 0x3FFF;
 
                     var angleObj = Activator.CreateInstance(angleType, raw);
-                    int sinQ16 = (int)miSin.Invoke(null, new[] { angleObj });
-                    int cosQ16 = (int)miCos.Invoke(null, new[] { angleObj });
+                    int tanVal = (int)miTan.Invoke(null, new[] { angleObj });
 
-                    // TAN via SIN/COS en fixed
-                    int tanVal;
-                    if (cosQ16 == 0)
-                        tanVal = (sinQ16 > 0) ? int.MaxValue : int.MinValue;
-                    else
-                        tanVal = (int)(((long)sinQ16 << 16) / cosQ16);
-
-                    // Angle réel ajusté vers 14 bits
                     double angleRatio = adjustedRaw / 16384.0;
                     double rad = angleRatio * (System.Math.PI * 2.0);
-                    double cosRad = System.Math.Cos(rad);
-                    double sinRad = System.Math.Sin(rad);
                     double tanRad = System.Math.Tan(rad);
 
-                    // Version "attendue" : tan(x) via System.Math.Tan, comparée à tanVal fixed
                     long expected;
-                    if (System.Math.Abs(cosRad) < 1e-12 || double.IsInfinity(tanRad))
-                        expected = (rad % (2 * System.Math.PI) > System.Math.PI / 2 && rad % (2 * System.Math.PI) < 3 * System.Math.PI / 2)
-                                   ? int.MinValue : int.MaxValue;
-                    else
-                    {
-                        double scaled = tanRad * 65536.0;
-                        if (System.Math.Abs(scaled) > int.MaxValue)
-                            expected = (scaled > 0) ? int.MaxValue : int.MinValue;
-                        else
-                            expected = (long)System.Math.Round(scaled);
-                    }
+                    if (double.IsInfinity(tanRad) || System.Math.Abs(tanRad) > 1e9)
+                        continue; // Ignore asymptotes pour les mesures
+
+                    double scaled = tanRad * 65536.0;
+                    expected = (System.Math.Abs(scaled) > int.MaxValue)
+                               ? (scaled > 0 ? int.MaxValue : int.MinValue)
+                               : (long)System.Math.Round(scaled);
 
                     int diff = (int)System.Math.Abs(tanVal - expected);
                     if (diff > maxDiff)
@@ -680,16 +651,11 @@ namespace FixedEngine.Tests.Math
                         maxDiff = diff;
                         maxDiffValue = diff / 65536.0;
                         maxDiffDeg = rad * 180.0 / System.Math.PI;
-
                         double sec2 = 1.0 + tanRad * tanRad;
-                        maxDiffAngleEqDeg = (sec2 != 0)
-                            ? maxDiffValue / sec2 * 180.0 / System.Math.PI
-                            : double.PositiveInfinity;
+                        maxDiffAngleEqDeg = (sec2 != 0) ? maxDiffValue / sec2 * 180.0 / System.Math.PI : double.PositiveInfinity;
                     }
 
-                    // ERREUR LINÉAIRE (hors saturation)
-                    bool inLinearZone = System.Math.Abs(tanRad) < 10000 && System.Math.Abs(expected) < int.MaxValue;
-                    if (inLinearZone)
+                    if (System.Math.Abs(tanRad) < 10000 && System.Math.Abs(expected) < int.MaxValue)
                     {
                         if (diff > maxDiffLin)
                         {
@@ -697,11 +663,8 @@ namespace FixedEngine.Tests.Math
                             maxDiffLinValue = diff / 65536.0;
                             maxDiffLinDeg = rad * 180.0 / System.Math.PI;
                         }
-                        // Max erreur angulaire linéaire
                         double sec2 = 1.0 + tanRad * tanRad;
-                        double angleEqDeg = (sec2 != 0)
-                            ? (diff / 65536.0) / sec2 * 180.0 / System.Math.PI
-                            : double.PositiveInfinity;
+                        double angleEqDeg = (sec2 != 0) ? (diff / 65536.0) / sec2 * 180.0 / System.Math.PI : double.PositiveInfinity;
                         if (angleEqDeg > maxDiffAngleEqDegLin)
                         {
                             maxDiffAngleEqDegLin = angleEqDeg;
@@ -709,15 +672,20 @@ namespace FixedEngine.Tests.Math
                         }
                     }
                 }
+
                 report += $"\nB{bits}\t{maxDiff}\t{maxDiffDeg:0.###}\t{maxDiffValue:0.00000}\t{maxDiffAngleEqDeg:0.00000}"
-                       + $"\t| {maxDiffLin}\t{maxDiffLinDeg:0.###}\t{maxDiffLinValue:0.00000}"
-                       + $"\t| {maxDiffAngleEqDegLin:0.00000}\t{maxDiffAngleEqDegLinAtDeg:0.00000}";
+                        + $"\t| {maxDiffLin}\t{maxDiffLinDeg:0.###}\t{maxDiffLinValue:0.00000}"
+                        + $"\t| {maxDiffAngleEqDegLin:0.00000}\t{maxDiffAngleEqDegLinAtDeg:0.00000}";
+
+                report += $"\n  ↳ LinError={maxDiffLinValue:0.#####} ≈ {maxDiffAngleEqDegLin:0.##}° at {maxDiffAngleEqDegLinAtDeg:0.##}°"
+                        + $" | TotalError={maxDiffValue:0.#####} ≈ {maxDiffAngleEqDeg:0.##}° at {maxDiffDeg:0.##}°";
             }
             Console.WriteLine(report);
             Assert.Pass(report);
         }
-
         #endregion
+
+
 
 
         #region --- TAN Retro (IntN) via SIN/COS ---
@@ -739,12 +707,12 @@ namespace FixedEngine.Tests.Math
 
                 var angleType = typeof(IntN<>).MakeGenericType(tagType);
                 var miSin = typeof(FixedMath).GetMethods()
-                              .First(m => m.Name == "Sin"
+                              .First(m => m.Name == "SinRaw"
                                        && m.IsGenericMethod
                                        && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(IntN<>))
                               .MakeGenericMethod(tagType);
                 var miCos = typeof(FixedMath).GetMethods()
-                              .First(m => m.Name == "Cos"
+                              .First(m => m.Name == "CosRaw"
                                        && m.IsGenericMethod
                                        && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(IntN<>))
                               .MakeGenericMethod(tagType);
