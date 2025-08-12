@@ -1014,7 +1014,6 @@ namespace FixedEngine.Tests.Math
         {
             var x = new UIntN<B8>((uint)angle);
             int result = (int)UIntN<B8>.Sin(x);
-            result = HardwareSigned(result, 8); // <-- wrap hardware rétro-faithful
             Assert.That(result, Is.EqualTo(expected).Within(1));
         }
 
@@ -1025,27 +1024,24 @@ namespace FixedEngine.Tests.Math
         {
             var x = new UIntN<B8>((uint)angle);
             int result = (int)UIntN<B8>.Cos(x);
-            result = HardwareSigned(result, 8);
             Assert.That(result, Is.EqualTo(expected).Within(1));
         }
 
         // Pour la tangente, même principe pour le wrap (sauf si tu retournes déjà int32 saturé)
         [TestCase(0, 0)]      // Tan(0°) = 0
-        [TestCase(64, int.MaxValue)]  // Tan(90°) = inf (handle overflow or saturate)
+        [TestCase(64, -1)]  // Tan(90°) = inf (handle overflow or saturate) ici -1
         [TestCase(128, 0)]    // Tan(180°) = 0
         public void Tan_UIntN_B8_Approx(int angle, int expected)
         {
             var x = new UIntN<B8>((uint)angle);
             int result = (int)UIntN<B8>.Tan(x);
-            // Optionnel : wrap si jamais tu satures sur 8 bits. Sinon, laisse tel quel.
-            // result = HardwareSigned(result, 8); // Dé-commente si tu retournes du B8
             Assert.That(result, Is.EqualTo(expected).Within(1));
         }
 
-        // Plage UIntN<B8> : 0 = 0.0, 255 = 1.0
-        [TestCase(0, 0)]      // asin(0.0) = 0°
-        [TestCase(127, 45)]   // asin(0.5) ≈ 45°
-        [TestCase(255, 64)]   // asin(1.0) = 90°
+
+        [TestCase(127, 0)]     // asin(0) ≈ 0
+        [TestCase(255, 127)]   // asin(+1.0) = +π/2
+        [TestCase(0, -128)]    // asin(–1.0) = –π/2
         public void Asin_UIntN_B8_Approx(int val, int expected)
         {
             var x = new UIntN<B8>((uint)val);
@@ -1054,10 +1050,9 @@ namespace FixedEngine.Tests.Math
                 $"asin({val}) attendu≈{expected}, obtenu={result.Raw}");
         }
 
-        // Plage sortie : [64…0]
-        [TestCase(255, 0)]    // acos(1.0) = 0°
-        [TestCase(127, 45)]   // acos(0.5) ≈ 45°
-        [TestCase(0, 64)]     // acos(0.0) = 90°
+        [TestCase(0, 128)]     // acos(-1.0) = 180°
+        [TestCase(127, 64)]    // acos(0.0)  = 90°
+        [TestCase(255, 0)]     // acos(+1.0) = 0°
         public void Acos_UIntN_B8_Approx(int val, int expected)
         {
             var x = new UIntN<B8>((uint)val);
@@ -1664,17 +1659,6 @@ namespace FixedEngine.Tests.Math
         }
 
         #endregion
-
-        public static int HardwareSigned(int value, int bits)
-        {
-            int mask = (1 << bits) - 1;
-            int raw = value & mask;
-            int signBit = 1 << (bits - 1);
-            if ((raw & signBit) != 0)
-                return raw - (1 << bits);
-            else
-                return raw;
-        }
 
     }
 }

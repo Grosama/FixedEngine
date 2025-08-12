@@ -197,7 +197,7 @@ public static class FixedMath
         if (bits < 2)
             throw new NotSupportedException($"FixedMath.Cos LUT n'est pas défini pour Bn={bits} en unsigned (min = B2).");
 
-        return CosCore(angle.Raw, bits, false);
+        return CosCore(angle.Raw, bits, true);
     }
 
     #endregion
@@ -403,23 +403,42 @@ public static class FixedMath
 
     public static int Q16_16AngleToBn(int q16_16, int bits, bool signed)
     {
-        // Pour arcsin, arccos, atan : Q16.16 = angle [-π/2, +π/2] (ou [-π, +π] selon la LUT)
-        // Map [-π/2, +π/2] sur [-2^(n-1), 2^(n-1)-1]
-        int max = (1 << (bits - 1)) - 1;
-        int min = -(1 << (bits - 1));
-        int result = (int)(((long)q16_16 * max) / TrigConsts.PI_2_Q[16]);
-        // Clamp
-        if (result < min) result = min;
-        if (result > max) result = max;
-        return result;
+        if (signed)
+        {
+            // Pour arcsin, arccos, atan : Q16.16 = angle [-π/2, +π/2] (ou [-π, +π] selon la LUT)
+            // Map [-π/2, +π/2] sur [-2^(n-1), 2^(n-1)-1]
+            int max = (1 << (bits - 1)) - 1;
+            int min = -(1 << (bits - 1));
+            int result = (int)(((long)q16_16 * max) / TrigConsts.PI_2_Q[16]);
+            // Clamp
+            if (result < min) result = min;
+            if (result > max) result = max;
+            return result;
+
+
+        }else
+        {
+
+            // [-π/2, +π/2] -> [0, 2^n-1]
+            int max = (1 << bits) - 1;
+            long num = (long)(q16_16 + TrigConsts.PI_2_Q[16]) * max; // décale pour commencer à 0
+            long den = TrigConsts.PI_Q[16];                           // longueur d’intervalle = π
+            int result = (int)((num + (den >> 1)) / den);             // arrondi au plus proche
+            if (result < 0) result = 0;
+            if (result > max) result = max;
+            return result;
+
+        }
+
     }
 
     public static int Q16_16AngleToBn_Atan2(int q16_16, int bits, bool signed)
     {
         if (!signed)
         {
+            // Mapping [0 .. 2π] → [0 .. 2ⁿ – 1]
             int max = (1 << bits) - 1;
-            long mapped = ((long)(q16_16 + TrigConsts.PI_Q[16]) * max) / (TrigConsts.PI_Q[16] * 2);
+            long mapped = ((long)q16_16 * max + (TrigConsts.PI2_Q[16] >> 1)) / TrigConsts.PI2_Q[16];
             int result = (int)mapped;
             if (result < 0) result = 0;
             if (result > max) result = max;
@@ -430,8 +449,7 @@ public static class FixedMath
             int min = -(1 << (bits - 1));
             int max = (1 << (bits - 1)) - 1;
             int range = max - min;
-            // Map [–π, +π] sur [–2^(n–1), +2^(n–1)–1]
-            long mapped = ((long)(q16_16 + TrigConsts.PI_Q[16]) * range) / (TrigConsts.PI_Q[16] * 2);
+            long mapped = ((long)(q16_16 + TrigConsts.PI_Q[16]) * range + (TrigConsts.PI_Q[16])) / TrigConsts.PI2_Q[16];
             int result = (int)(mapped + min);
             if (result < min) result = min;
             if (result > max) result = max;
@@ -460,7 +478,15 @@ public static class FixedMath
         else
         {
             // Hardware: [0, π] → [0, 2^n–1]
-            int max = (1 << bits) - 1;
+            /*int max = (1 << bits) - 1;
+            long mapped = ((long)q16_16 * max + (TrigConsts.PI_Q[16] >> 1)) / TrigConsts.PI_Q[16];
+            int result = (int)mapped;
+            if (result < 0) result = 0;
+            if (result > max) result = max;
+            return result;*/
+
+            // Hardware: [0, π] → [0, 2^(n-1)] (ex: 0..128)
+            int max = 1 << (bits - 1); // ✅ moitié du full range
             long mapped = ((long)q16_16 * max + (TrigConsts.PI_Q[16] >> 1)) / TrigConsts.PI_Q[16];
             int result = (int)mapped;
             if (result < 0) result = 0;
@@ -514,8 +540,10 @@ public static class FixedMath
 
         uint maxRaw = (1u << bits) - 1;
         // map [0,max] -> [-65536,+65536]  (rétro-faithful)
-        int valQ16 = (int)((((long)v.Raw * 2 - maxRaw) * 65536) / maxRaw);
-        return Q16_16AngleToBn(AsinLut4096Core(valQ16, bits), bits, false);
+        //int valQ16 = (int)((((long)v.Raw * 2 - maxRaw) * 65536) / maxRaw);
+        int valQ16 = (int)(((long)v.Raw * 2 - maxRaw) * 65536 / maxRaw);
+        //int valQ16 = ((int)v.Raw * 2 - (int)maxRaw) * 65536 / (int)maxRaw;
+        return Q16_16AngleToBn(AsinLut4096Core(valQ16, bits), bits, true);
     }
     #endregion
 
@@ -722,7 +750,7 @@ public static class FixedMath
         uint raw = x.Raw;
         int q16_16 =  (raw == 0) ? 0 : AtanCore(raw, bits);
 
-        return Q16_16AngleToBn(q16_16, bits, false);
+        return Q16_16AngleToBn(q16_16, bits, true);
     }
     #endregion
 
@@ -748,51 +776,6 @@ public static class FixedMath
     }
 
     #endregion
-
-    /*public static void DumpAtanLUTDebug()
-    {
-        // Tu peux ajuster le pas si tu veux moins d'output
-        for (int raw = -128; raw <= 127; raw++)
-        {
-            var x = new IntN<B8>(raw);
-
-            // 1. Entrée normalisée (amplitude)
-            float amplitude = raw / 127f;
-
-            // 2. Index LUT utilisé (on doit simuler la génération d’index de ta fonction AtanCore)
-            int bits = 8; // pour B8
-            int absRaw = Math.Abs(raw);
-            ulong one = (ulong)(1 << bits); // 256
-
-            int idxLUT;
-            if (absRaw <= (int)one)
-            {
-                // Cas principal de ta fonction AtanCore (sinon tu veux tester le path asymptotique aussi)
-                // Pour ta LUT sur 12 bits :
-                int LUT_BITS = 12, lutMask = (1 << LUT_BITS) - 1;
-                int fracBits = bits;
-                if (fracBits < LUT_BITS)
-                    idxLUT = (absRaw << (LUT_BITS - fracBits)) & lutMask;
-                else
-                    idxLUT = (absRaw >> (fracBits - LUT_BITS)) & lutMask;
-            }
-            else
-            {
-                idxLUT = -1; // Hors plage, path pio2 - AtanLutBitFaithful(...)
-            }
-
-            // 3. Valeur Q16 de la LUT
-            int lutQ16 = (idxLUT >= 0 && idxLUT < AtanLUT4096.LUT.Length) ? AtanLUT4096.LUT[idxLUT] : 0;
-
-            // 4. Conversion angle rétro hardware
-            int q16_16 = (raw == 0) ? 0 : (raw < 0 ? -lutQ16 : lutQ16);
-
-            int b8 = Q16_16AngleToBn(q16_16, bits, true); // bit-faithful
-
-            // 5. Affichage
-            Console.WriteLine($"raw={raw,4}  amp={amplitude,8:F3}  idxLUT={idxLUT,4}  LUT(Q16)={lutQ16,6}  Q16.16={q16_16,6}  B8={b8,4}");
-        }
-    }*/
 
     #region --- ATAN (UFixed) ---
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

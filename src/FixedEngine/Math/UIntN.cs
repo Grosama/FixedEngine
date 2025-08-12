@@ -551,22 +551,24 @@ namespace FixedEngine.Math
          ==================================*/
         #region --- FONCTIONS TRIGONOMÉTRIQUES ---
 
-        public static UIntN<TBits> Sin(UIntN<TBits> angle)
-            => new UIntN<TBits>(FixedMath.Sin(angle));
-        public static UIntN<TBits> Cos(UIntN<TBits> angle)
-            => new UIntN<TBits>(FixedMath.Cos(angle));
-        public static UIntN<TBits> Tan(UIntN<TBits> angle)
-            => new UIntN<TBits>(FixedMath.Tan(angle));
+        public static IntN<TBits> Sin(UIntN<TBits> angle)
+            => new IntN<TBits>(FixedMath.Sin(angle));
+        public static IntN<TBits> Cos(UIntN<TBits> angle)
+            => new IntN<TBits>(FixedMath.Cos(angle));
+        public static IntN<TBits> Tan(UIntN<TBits> angle)
+            => new IntN<TBits>(FixedMath.Tan(angle));
 
-        // Fonctions inverses (retournent aussi UIntN, même si en pratique, la sémantique est “binaire d’angle”)
-        public static UIntN<TBits> Asin(UIntN<TBits> val)
-            => new UIntN<TBits>(FixedMath.Asin(val));
+        //Inverse
+        public static IntN<TBits> Asin(UIntN<TBits> val)
+            => new IntN<TBits>(FixedMath.Asin(val));
         public static UIntN<TBits> Acos(UIntN<TBits> val)
             => new UIntN<TBits>(FixedMath.Acos(val));
         public static UIntN<TBits> Atan(UIntN<TBits> val)
             => new UIntN<TBits>(FixedMath.Atan(val));
         public static UIntN<TBits> Atan2(UIntN<TBits> y, UIntN<TBits> x)
             => new UIntN<TBits>(FixedMath.Atan2(y, x));
+
+
 
         #endregion
 
