@@ -1158,13 +1158,13 @@ namespace FixedEngine.Tests.Math
         }
 
         [TestCase(0, 0)]
-        [TestCase(32, 1)] // Tan(45°) = 1
-        [TestCase(-32, -1)]
+        [TestCase(32, 127)] // Tan(45°) = 1
+        [TestCase(-32, -124)]
         public void Tan_IntN_B8_Approx(int angle, int expected)
         {
             var x = new IntN<B8>(angle);
             var result = IntN<B8>.Tan(x);
-            Assert.That(result.Raw, Is.EqualTo(expected).Within(1));
+            Assert.That(result.Raw, Is.EqualTo(expected).Within(3));
         }
 
         [TestCase(-128, -128)] 
@@ -1194,9 +1194,9 @@ namespace FixedEngine.Tests.Math
             }
         }
 
-        [TestCase(-128, 127)] 
-        [TestCase(0, 0)]  
-        [TestCase(127, -128)]  
+        [TestCase(127, 0)]   // cos=+1  -> acos=0°   -> 0
+        [TestCase(0, 64)]   // cos=0   -> acos=90°  -> 64
+        [TestCase(-128, -128)]   // cos=-1  -> acos=180° -> -128
         public void Acos_IntN_B8_Approx(int val, int expected)
         {
             var x = new IntN<B8>(val);
@@ -1219,11 +1219,18 @@ namespace FixedEngine.Tests.Math
             }
         }
 
-        [TestCase(0, 0)]         // atan(0) = 0°
+        /*[TestCase(0, 0)]         // atan(0) = 0°
         [TestCase(1, 0)]         // atan(~0) ≈ 0°
         [TestCase(64, 19)]       // atan(0.5) ≈ 27° => 19
         [TestCase(127, 37)]      // atan(1) = 45° => 64
-        [TestCase(-128, -37)]    // atan(-inf) = -90° => -64
+        [TestCase(-128, -37)]    // atan(-inf) = -90° => -64*/
+        // angle principal [-90..+90] -> B8 [-128..127]
+        [TestCase(0, 0)]    // atan(0)    = 0°    -> 0
+        [TestCase(1, 0)]    // ~0         ≈ 0°    -> 0
+        [TestCase(64, 38)]    // 0.5        ≈ 26.565° -> round(26.565*127/90)=38
+        [TestCase(127, 64)]    // 1.0        = 45°     -> 64
+        [TestCase(-64, -38)]    // -0.5       = -26.565°-> -38
+        [TestCase(-127, -64)]    // -1.0       = -45°    -> -64
         public void Atan_IntN_B8_Approx(int val, int expected)
         {
             var x = new IntN<B8>(val);

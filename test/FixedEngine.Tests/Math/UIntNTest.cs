@@ -1029,7 +1029,7 @@ namespace FixedEngine.Tests.Math
 
         // Pour la tangente, même principe pour le wrap (sauf si tu retournes déjà int32 saturé)
         [TestCase(0, 0)]      // Tan(0°) = 0
-        [TestCase(64, -1)]  // Tan(90°) = inf (handle overflow or saturate) ici -1
+        [TestCase(64, -128)]  // Tan(90°) = inf (handle overflow or saturate) ici -128
         [TestCase(128, 0)]    // Tan(180°) = 0
         public void Tan_UIntN_B8_Approx(int angle, int expected)
         {
@@ -1050,9 +1050,9 @@ namespace FixedEngine.Tests.Math
                 $"asin({val}) attendu≈{expected}, obtenu={result.Raw}");
         }
 
-        [TestCase(0, 128)]     // acos(-1.0) = 180°
-        [TestCase(127, 64)]    // acos(0.0)  = 90°
         [TestCase(255, 0)]     // acos(+1.0) = 0°
+        [TestCase(127, 64)]    // acos(0.0)  = 90°
+        [TestCase(0, 128)]     // acos(-1.0) = 180°
         public void Acos_UIntN_B8_Approx(int val, int expected)
         {
             var x = new UIntN<B8>((uint)val);

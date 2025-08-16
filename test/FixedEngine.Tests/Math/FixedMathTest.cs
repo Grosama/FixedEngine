@@ -262,6 +262,7 @@ namespace FixedEngine.Tests.Math
             }
         }
 
+        [Explicit]
         [Test]
         public void Sin_IntN_B2toB31_MaxDiffMeasure()
         {
@@ -525,6 +526,7 @@ namespace FixedEngine.Tests.Math
             }
         }
 
+        [Explicit]
         [Test]
         public void Cos_IntN_B2toB31_MaxDiffMeasure()
         {
@@ -587,17 +589,27 @@ namespace FixedEngine.Tests.Math
         #endregion
 
         // ----- TAN -----
-
         #region --- TAN Retro (UIntN) via TanRaw ---
+        [Explicit] // lourd : 1e6 itérations possibles
         [Test]
         public void Tan_UIntN_B2toB32_MaxDiffMeasure_TanRaw()
         {
             var asm = typeof(FixedEngine.Math.B2).Assembly;
+
             string report = "\nBn\tMaxDiff\tMaxDiffDeg\tMaxDiffValue\tMaxDiffAngleEqDeg"
                           + "\t| LinearZone | MaxDiffLin\tMaxDiffLinDeg\tMaxDiffLinValue"
                           + "\t| MaxDiffAngleEqDeg_Lin\tAtDeg";
 
             var rng = new Random(24680);
+
+            var miTanRawOpen = typeof(FixedMath).GetMethods()
+                .Where(m => m.Name == "TanRaw" && m.IsGenericMethodDefinition)
+                .First(m => {
+                    var ps = m.GetParameters();
+                    return ps.Length == 1
+                           && ps[0].ParameterType.IsGenericType
+                           && ps[0].ParameterType.GetGenericTypeDefinition() == typeof(UIntN<>);
+                });
 
             for (int bits = 2; bits <= 32; bits++)
             {
@@ -605,56 +617,75 @@ namespace FixedEngine.Tests.Math
                 if (tagType == null) { Console.WriteLine($"Type B{bits} absent : SKIP"); continue; }
 
                 var angleType = typeof(UIntN<>).MakeGenericType(tagType);
-                var miTan = typeof(FixedMath).GetMethods()
-                                  .First(m => m.Name == "TanRaw"
-                                           && m.IsGenericMethod
-                                           && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(UIntN<>))
-                                  .MakeGenericMethod(tagType);
+                var miTan = miTanRawOpen.MakeGenericMethod(tagType);
 
-                uint maxRaw = (bits == 32) ? uint.MaxValue : (1u << bits) - 1;
-                int samples = (bits >= 28) ? 1_000_000 : System.Math.Min((int)maxRaw + 1, 1_000_000);
+                uint maxRaw = (bits == 32) ? 0xFFFF_FFFFu : ((1u << bits) - 1u);
+
+                // Échantillonnage : dense mais borné
+                int samples = (bits >= 28) ? 300_000 : System.Math.Min((int)maxRaw + 1, 1_000_000);
 
                 int maxDiff = 0;
                 double maxDiffDeg = 0, maxDiffValue = 0, maxDiffAngleEqDeg = 0;
+
                 int maxDiffLin = 0;
                 double maxDiffLinDeg = 0, maxDiffLinValue = 0, maxDiffAngleEqDegLin = 0, maxDiffAngleEqDegLinAtDeg = 0;
 
+                ulong denom = (bits == 32) ? (1UL << 32) : (1UL << bits); // évite overflow
+
                 for (int i = 0; i < samples; i++)
                 {
-                    uint raw = (bits >= 28)
-                               ? (uint)rng.NextInt64(0, (long)maxRaw + 1)
-                               : (uint)((ulong)maxRaw * (ulong)i / (ulong)samples);
+                    uint raw;
+                    if (bits >= 28)
+                    {
+                        // tirage pseudo-aléatoire uniforme
+                        raw = (uint)rng.NextInt64(0, (long)maxRaw + 1);
+                    }
+                    else
+                    {
+                        // balayage uniforme
+                        raw = (uint)((ulong)maxRaw * (ulong)i / (ulong)System.Math.Max(1, samples - 1));
+                    }
 
-                    uint adjustedRaw = bits <= 14
-                        ? (raw << (14 - bits)) & 0x3FFF
-                        : (raw >> (bits - 14)) & 0x3FFF;
-
+                    // Construit l'angle UIntN<Bn>
                     var angleObj = Activator.CreateInstance(angleType, raw);
+
+                    // Appel à FixedMath.TanRaw(UIntN<Bn>)
                     int tanVal = (int)miTan.Invoke(null, new[] { angleObj });
 
-                    double angleRatio = adjustedRaw / 16384.0;
+                    // Skip si sentinelle asymptote renvoyée par TanRawCore
+                    if (tanVal == int.MaxValue || tanVal == int.MinValue)
+                        continue;
+
+                    // Angle en radians (0..2π) depuis l'angle N-bits
+                    double angleRatio = (double)raw / (double)denom;
                     double rad = angleRatio * (System.Math.PI * 2.0);
                     double tanRad = System.Math.Tan(rad);
 
-                    long expected;
+                    // Ignore les zones trop proches des asymptotes
                     if (double.IsInfinity(tanRad) || System.Math.Abs(tanRad) > 1e9)
-                        continue; // Ignore asymptotes pour les mesures
+                        continue;
 
+                    // Expected en Q16.16 (≈ TanRawCore)
                     double scaled = tanRad * 65536.0;
-                    expected = (System.Math.Abs(scaled) > int.MaxValue)
-                               ? (scaled > 0 ? int.MaxValue : int.MinValue)
-                               : (long)System.Math.Round(scaled);
+
+                    long expected = (System.Math.Abs(scaled) > int.MaxValue)
+                        ? (scaled > 0 ? int.MaxValue : int.MinValue)
+                        : (long)System.Math.Round(scaled);
 
                     int diff = (int)System.Math.Abs(tanVal - expected);
+
                     if (diff > maxDiff)
                     {
                         maxDiff = diff;
                         maxDiffValue = diff / 65536.0;
                         maxDiffDeg = rad * 180.0 / System.Math.PI;
+
+                        // équivalence d'erreur angulaire via d(tan)/dθ = sec^2(θ)
                         double sec2 = 1.0 + tanRad * tanRad;
-                        maxDiffAngleEqDeg = (sec2 != 0) ? maxDiffValue / sec2 * 180.0 / System.Math.PI : double.PositiveInfinity;
+                        maxDiffAngleEqDeg = (sec2 != 0) ? (maxDiffValue / sec2) * (180.0 / System.Math.PI) : double.PositiveInfinity;
                     }
 
+                    // Zone "linéaire" (utile gameplay)
                     if (System.Math.Abs(tanRad) < 10000 && System.Math.Abs(expected) < int.MaxValue)
                     {
                         if (diff > maxDiffLin)
@@ -663,8 +694,9 @@ namespace FixedEngine.Tests.Math
                             maxDiffLinValue = diff / 65536.0;
                             maxDiffLinDeg = rad * 180.0 / System.Math.PI;
                         }
+
                         double sec2 = 1.0 + tanRad * tanRad;
-                        double angleEqDeg = (sec2 != 0) ? (diff / 65536.0) / sec2 * 180.0 / System.Math.PI : double.PositiveInfinity;
+                        double angleEqDeg = (sec2 != 0) ? (diff / 65536.0) / sec2 * (180.0 / System.Math.PI) : double.PositiveInfinity;
                         if (angleEqDeg > maxDiffAngleEqDegLin)
                         {
                             maxDiffAngleEqDegLin = angleEqDeg;
@@ -680,113 +712,124 @@ namespace FixedEngine.Tests.Math
                 report += $"\n  ↳ LinError={maxDiffLinValue:0.#####} ≈ {maxDiffAngleEqDegLin:0.##}° at {maxDiffAngleEqDegLinAtDeg:0.##}°"
                         + $" | TotalError={maxDiffValue:0.#####} ≈ {maxDiffAngleEqDeg:0.##}° at {maxDiffDeg:0.##}°";
             }
+
             Console.WriteLine(report);
             Assert.Pass(report);
         }
         #endregion
 
-
-
-
-        #region --- TAN Retro (IntN) via SIN/COS ---
-
+        #region --- TAN Retro (IntN) via TanRaw ---
+        [Explicit] // lourd : jusqu’à 3e5–1e6 itérations
         [Test]
-        public void Tan_IntN_B2toB31_MaxDiffMeasure_SinCos()
+        public void Tan_IntN_B2toB31_MaxDiffMeasure_TanRaw()
         {
             var asm = typeof(FixedEngine.Math.B2).Assembly;
+
             string report = "\nBn\tMaxDiff\tMaxDiffDeg\tMaxDiffValue\tMaxDiffAngleEqDeg"
                           + "\t| LinearZone | MaxDiffLin\tMaxDiffLinDeg\tMaxDiffLinValue"
                           + "\t| MaxDiffAngleEqDeg_Lin\tAtDeg";
 
-            var rng = new Random(97531);
+            var rng = new Random(13579);
+
+            // Récupère la méthode générique FixedMath.TanRaw(IntN<>)
+            var miTanRawOpen = typeof(FixedMath).GetMethods()
+                .Where(m => m.Name == "TanRaw" && m.IsGenericMethodDefinition)
+                .First(m =>
+                {
+                    var ps = m.GetParameters();
+                    return ps.Length == 1
+                        && ps[0].ParameterType.IsGenericType
+                        && ps[0].ParameterType.GetGenericTypeDefinition() == typeof(IntN<>);
+                });
 
             for (int bits = 2; bits <= 31; bits++)
             {
                 var tagType = asm.GetType($"FixedEngine.Math.B{bits}");
-                if (tagType == null) { System.Console.WriteLine($"Type B{bits} absent : SKIP"); continue; }
+                if (tagType == null) { Console.WriteLine($"Type B{bits} absent : SKIP"); continue; }
 
                 var angleType = typeof(IntN<>).MakeGenericType(tagType);
-                var miSin = typeof(FixedMath).GetMethods()
-                              .First(m => m.Name == "SinRaw"
-                                       && m.IsGenericMethod
-                                       && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(IntN<>))
-                              .MakeGenericMethod(tagType);
-                var miCos = typeof(FixedMath).GetMethods()
-                              .First(m => m.Name == "CosRaw"
-                                       && m.IsGenericMethod
-                                       && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(IntN<>))
-                              .MakeGenericMethod(tagType);
+                var miTan = miTanRawOpen.MakeGenericMethod(tagType);
 
-                int minRaw = -(1 << (bits - 1));
-                int maxRaw = (1 << (bits - 1)) - 1;
-                ulong domain = (ulong)maxRaw - (ulong)minRaw + 1;
-                int samples = (bits >= 28) ? 1_000_000 : (int)domain;
+                int maxSigned = (1 << (bits - 1)) - 1;        // +127 (B8), etc.
+                int minSigned = -(1 << (bits - 1));           // -128 (B8), etc.
+                int spanSize = (1 << bits);                  // 2^bits
+                uint mask = (bits == 32) ? 0xFFFF_FFFFu : ((1u << bits) - 1u); // pour sécurité (bits<=31 ici)
+
+                // Échantillonnage : dense mais borné pour CI
+                int samples = (bits >= 28) ? 300_000 : System.Math.Min(spanSize, 1_000_000);
 
                 int maxDiff = 0;
-                double maxDiffDeg = 0;
-                double maxDiffValue = 0;
-                double maxDiffAngleEqDeg = 0;
+                double maxDiffDeg = 0, maxDiffValue = 0, maxDiffAngleEqDeg = 0;
 
                 int maxDiffLin = 0;
-                double maxDiffLinDeg = 0;
-                double maxDiffLinValue = 0;
+                double maxDiffLinDeg = 0, maxDiffLinValue = 0, maxDiffAngleEqDegLin = 0, maxDiffAngleEqDegLinAtDeg = 0;
 
-                double maxDiffAngleEqDegLin = 0;
-                double maxDiffAngleEqDegLinAtDeg = 0;
+                // denom = 2^bits pour convertir uraw -> ratio d’angle
+                double denom = System.Math.Pow(2.0, bits);
 
                 for (int i = 0; i < samples; i++)
                 {
-                    int raw = (bits >= 28)
-                              ? (int)(minRaw + rng.NextInt64((long)domain))
-                              : minRaw + i;
-
-                    int inputRaw = bits <= 14
-                        ? ((int)((uint)raw << (14 - bits)) & 0x3FFF)
-                        : ((int)((uint)raw >> (bits - 14)) & 0x3FFF);
-
-                    var angleObj = Activator.CreateInstance(angleType, inputRaw);
-                    int sinQ16 = (int)miSin.Invoke(null, new[] { angleObj });
-                    int cosQ16 = (int)miCos.Invoke(null, new[] { angleObj });
-
-                    // TAN via SIN/COS en fixed
-                    int tanVal;
-                    if (cosQ16 == 0)
-                        tanVal = (sinQ16 > 0) ? int.MaxValue : int.MinValue;
-                    else
-                        tanVal = (int)(((long)sinQ16 << 16) / cosQ16);
-
-                    double angleRatio = inputRaw / 16384.0;
-                    double rad = angleRatio * (System.Math.PI * 2.0);
-                    double cosRad = System.Math.Cos(rad);
-                    double tanRad = System.Math.Tan(rad);
-
-                    long expected;
-                    if (System.Math.Abs(cosRad) < 1e-12 || double.IsInfinity(tanRad))
-                        expected = (rad > 0) ? int.MaxValue : int.MinValue;
+                    // Échantillon signé
+                    int rawSigned;
+                    if (bits >= 28)
+                    {
+                        // tirage pseudo-aléatoire uniforme sur [min..max]
+                        long r = rng.NextInt64(minSigned, (long)maxSigned + 1);
+                        rawSigned = (int)r;
+                    }
                     else
                     {
-                        double scaled = tanRad * 65536.0;
-                        expected = (System.Math.Abs(scaled) > int.MaxValue)
-                                   ? (scaled > 0 ? int.MaxValue : int.MinValue)
-                                   : (long)System.Math.Round(scaled);
+                        // balayage uniforme sur [min..max]
+                        // map i -> [-half .. +half-1]
+                        int half = 1 << (bits - 1);
+                        rawSigned = -half + (int)((long)(spanSize - 1) * i / System.Math.Max(1, samples - 1));
+                        if (rawSigned > maxSigned) rawSigned = maxSigned;
                     }
 
+                    // Construction IntN<Bn>
+                    var angleObj = Activator.CreateInstance(angleType, rawSigned);
+
+                    // Appel à FixedMath.TanRaw(IntN<Bn>)
+                    int tanVal = (int)miTan.Invoke(null, new[] { angleObj });
+
+                    // Skip si sentinelle asymptote
+                    if (tanVal == int.MaxValue || tanVal == int.MinValue)
+                        continue;
+
+                    // IMPORTANT : pour comparer à Math.Tan, on convertit l’angle EXACTEMENT
+                    // comme le fait TanRaw(IntN): wrap signé -> unsigned sur N bits.
+                    uint uraw = (uint)rawSigned & mask;
+
+                    // Angle en radians 0..2π
+                    double angleRatio = uraw / denom;
+                    double rad = angleRatio * (System.Math.PI * 2.0);
+                    double tanRad = System.Math.Tan(rad);
+
+                    // Ignore les zones trop proches des asymptotes
+                    if (double.IsInfinity(tanRad) || System.Math.Abs(tanRad) > 1e9)
+                        continue;
+
+                    // Valeur attendue en Q16.16
+                    double scaled = tanRad * 65536.0;
+                    long expected = (System.Math.Abs(scaled) > int.MaxValue)
+                        ? (scaled > 0 ? int.MaxValue : int.MinValue)
+                        : (long)System.Math.Round(scaled);
+
                     int diff = (int)System.Math.Abs(tanVal - expected);
+
                     if (diff > maxDiff)
                     {
                         maxDiff = diff;
                         maxDiffValue = diff / 65536.0;
                         maxDiffDeg = rad * 180.0 / System.Math.PI;
 
+                        // Équivalence d’erreur angulaire via d(tan)/dθ = sec^2(θ)
                         double sec2 = 1.0 + tanRad * tanRad;
-                        maxDiffAngleEqDeg = (sec2 != 0)
-                            ? maxDiffValue / sec2 * 180.0 / System.Math.PI
-                            : double.PositiveInfinity;
+                        maxDiffAngleEqDeg = (sec2 != 0) ? (maxDiffValue / sec2) * (180.0 / System.Math.PI) : double.PositiveInfinity;
                     }
 
-                    // ERREUR LINÉAIRE (hors saturation)
-                    bool inLinearZone = System.Math.Abs(tanRad) < 10000 && System.Math.Abs(expected) < int.MaxValue;
-                    if (inLinearZone)
+                    // Zone "linéaire" utile gameplay (|tan| raisonnable)
+                    if (System.Math.Abs(tanRad) < 10000 && System.Math.Abs(expected) < int.MaxValue)
                     {
                         if (diff > maxDiffLin)
                         {
@@ -794,11 +837,9 @@ namespace FixedEngine.Tests.Math
                             maxDiffLinValue = diff / 65536.0;
                             maxDiffLinDeg = rad * 180.0 / System.Math.PI;
                         }
-                        // Max erreur angulaire linéaire
+
                         double sec2 = 1.0 + tanRad * tanRad;
-                        double angleEqDeg = (sec2 != 0)
-                            ? (diff / 65536.0) / sec2 * 180.0 / System.Math.PI
-                            : double.PositiveInfinity;
+                        double angleEqDeg = (sec2 != 0) ? (diff / 65536.0) / sec2 * (180.0 / System.Math.PI) : double.PositiveInfinity;
                         if (angleEqDeg > maxDiffAngleEqDegLin)
                         {
                             maxDiffAngleEqDegLin = angleEqDeg;
@@ -806,14 +847,18 @@ namespace FixedEngine.Tests.Math
                         }
                     }
                 }
+
                 report += $"\nB{bits}\t{maxDiff}\t{maxDiffDeg:0.###}\t{maxDiffValue:0.00000}\t{maxDiffAngleEqDeg:0.00000}"
-                       + $"\t| {maxDiffLin}\t{maxDiffLinDeg:0.###}\t{maxDiffLinValue:0.00000}"
-                       + $"\t| {maxDiffAngleEqDegLin:0.00000}\t{maxDiffAngleEqDegLinAtDeg:0.00000}";
+                        + $"\t| {maxDiffLin}\t{maxDiffLinDeg:0.###}\t{maxDiffLinValue:0.00000}"
+                        + $"\t| {maxDiffAngleEqDegLin:0.00000}\t{maxDiffAngleEqDegLinAtDeg:0.00000}";
+
+                report += $"\n  ↳ LinError={maxDiffLinValue:0.#####} ≈ {maxDiffAngleEqDegLin:0.##}° at {maxDiffAngleEqDegLinAtDeg:0.##}°"
+                        + $" | TotalError={maxDiffValue:0.#####} ≈ {maxDiffAngleEqDeg:0.##}° at {maxDiffDeg:0.##}°";
             }
-            System.Console.WriteLine(report);
+
+            Console.WriteLine(report);
             Assert.Pass(report);
         }
-
         #endregion
 
         #endregion
@@ -891,7 +936,7 @@ namespace FixedEngine.Tests.Math
         // --- ASIN LUT Retro (IntN)  *** patché *** ---
         // ============================================
         #region --- ASIN LUT Retro (IntN)
-
+        [Explicit]
         [Test]
         public void Asin_IntN_B2toB31_MaxDiffMeasure()
         {
