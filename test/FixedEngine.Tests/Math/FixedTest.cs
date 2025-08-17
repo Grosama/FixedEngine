@@ -1119,6 +1119,17 @@ namespace FixedEngine.Tests.Math
         #endregion
 
         /*==================================
+         * --- FONCTIONS TRIGONOMETRIQUES ---
+         * Sin
+         * Cos
+         * Tan
+         * Asin
+         * Acos
+         * Atan
+         * Atan2
+         ==================================*/
+
+        /*==================================
          * --- MANIPULATION BITS ET ROTATIONS ---
          * Reverse
          * PopCount
@@ -1758,10 +1769,10 @@ namespace FixedEngine.Tests.Math
         #endregion
 
         /*==================================
- * --- SERIALISATION META ---
- * ToJsonWithMeta
- * FromJsonWithMeta
- ==================================*/
+         * --- SERIALISATION META ---
+         * ToJsonWithMeta
+         * FromJsonWithMeta
+         ==================================*/
         #region --- SERIALISATION META (exhaustif, multi-Q, erreurs) ---
 
         [TestCase(0)]

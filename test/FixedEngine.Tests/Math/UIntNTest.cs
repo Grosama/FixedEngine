@@ -1061,22 +1061,28 @@ namespace FixedEngine.Tests.Math
                 $"acos({val}) attendu≈{expected}, obtenu={result.Raw}");
         }
 
-        // atan(0) = 0, atan(255) = 90°
-        [TestCase(0, 0)]      // atan(0.0) = 0°
-        [TestCase(127, 32)]   // atan(127/255) ≈ 26°
-        [TestCase(255, 64)]   // atan(+inf) = 90°
+        // atan(0) = 0° ; atan(127/255 ≈ 0.498) ≈ 26.565° ; atan(255/255 = 1) = 45°
+        [TestCase(0, 0)]   // 0.0  -> 0°
+        [TestCase(127, 38)]   // ~0.498 -> ~26.565° -> 38
+        [TestCase(255, 64)]   // 1.0  -> 45° -> 64
         public void Atan_UIntN_B8_Approx(int val, int expected)
         {
             var x = new UIntN<B8>((uint)val);
             var result = UIntN<B8>.Atan(x);
-            Assert.That(result.Raw, Is.EqualTo(expected).Within(5),
-                $"atan({val}) attendu≈{expected}, obtenu={result.Raw}");
+            Assert.That(result.Raw, Is.EqualTo(expected).Within(2));
         }
 
-        // atan2(y, x), sortie sur [0…127] (0 = 0°, 64 = 90°, 127 = 180°)
-        [TestCase(0, 1, 0)]    // atan2(0, 1) = 0°
-        [TestCase(1, 0, 64)]   // atan2(1, 0) = 90°
-        [TestCase(1, 1, 32)]   // atan2(1, 1) = 45°
+        // Plein cercle UIntN<B8> : 0°=0, 90°=64, 180°=128, 270°=192
+        [TestCase(0, 255, 0)]   // +X
+        [TestCase(255, 0, 64)]   // +Y
+        [TestCase(0, 0, 0)]   // (0,0) convention → 0
+        [TestCase(255, 255, 32)]   // 45°
+        [TestCase(1, 255, 0)]   // ~0° (petit y)
+        [TestCase(255, 1, 64)]   // ~90° (petit x)
+        [TestCase(0, 1, 0)]   // +X (petit)
+        [TestCase(0, 128, 0)]   // +X mid
+        [TestCase(0, 2, 0)]   // +X très petit
+        [TestCase(0, 255, 0)]   // +X répété (inutile mais ok)
         public void Atan2_UIntN_B8_Approx(int y, int x, int expected)
         {
             var a = new UIntN<B8>((uint)y);

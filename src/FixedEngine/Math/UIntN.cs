@@ -568,8 +568,6 @@ namespace FixedEngine.Math
         public static UIntN<TBits> Atan2(UIntN<TBits> y, UIntN<TBits> x)
             => new UIntN<TBits>(FixedMath.Atan2(y, x));
 
-
-
         #endregion
 
         /*==================================

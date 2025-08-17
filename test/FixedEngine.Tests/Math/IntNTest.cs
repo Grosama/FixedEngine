@@ -1219,12 +1219,6 @@ namespace FixedEngine.Tests.Math
             }
         }
 
-        /*[TestCase(0, 0)]         // atan(0) = 0°
-        [TestCase(1, 0)]         // atan(~0) ≈ 0°
-        [TestCase(64, 19)]       // atan(0.5) ≈ 27° => 19
-        [TestCase(127, 37)]      // atan(1) = 45° => 64
-        [TestCase(-128, -37)]    // atan(-inf) = -90° => -64*/
-        // angle principal [-90..+90] -> B8 [-128..127]
         [TestCase(0, 0)]    // atan(0)    = 0°    -> 0
         [TestCase(1, 0)]    // ~0         ≈ 0°    -> 0
         [TestCase(64, 38)]    // 0.5        ≈ 26.565° -> round(26.565*127/90)=38
@@ -1238,9 +1232,14 @@ namespace FixedEngine.Tests.Math
             Assert.That(result.Raw, Is.EqualTo(expected).Within(1));
         }
 
-        [TestCase(0, 1, 0)] // atan2(0, 1) = 0°
-        [TestCase(1, 0, 64)] // atan2(1, 0) = 90°
-        [TestCase(1, 1, 32)] // atan2(1,1) = 45°
+        [TestCase(0, 1, 0)]   // 0°
+        [TestCase(1, 0, 64)]   // +90°
+        [TestCase(0, -1, -128)]   // 180° (wrap)
+        [TestCase(-1, 0, -64)]   // -90°
+        [TestCase(1, 1, 32)]   // 45°
+        [TestCase(1, -1, 96)]   // 135°
+        [TestCase(-1, -1, -96)]   // -135°
+        [TestCase(-1, 1, -32)]   // -45°
         public void Atan2_IntN_B8_Approx(int y, int x, int expected)
         {
             var a = new IntN<B8>(y);
@@ -1248,12 +1247,6 @@ namespace FixedEngine.Tests.Math
             var result = IntN<B8>.Atan2(a, b);
             Assert.That(result.Raw, Is.EqualTo(expected).Within(1));
         }
-
-        /*[Test]
-        public void Debug_DumpAtanLUT()
-        {
-            FixedMath.DumpAtanLUTDebug();
-        }*/
 
         #endregion
 

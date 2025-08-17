@@ -1012,7 +1012,6 @@ namespace FixedEngine.Tests.Math
 
         #endregion
 
-
         /*==================================
          * --- SATURATION ---
          * AddSat
@@ -1120,6 +1119,16 @@ namespace FixedEngine.Tests.Math
 
         #endregion
 
+        /*==================================
+         * --- FONCTIONS TRIGONOMETRIQUES ---
+         * Sin
+         * Cos
+         * Tan
+         * Asin
+         * Acos
+         * Atan
+         * Atan2
+         ==================================*/
 
         /*==================================
          * --- MANIPULATION BITS ET ROTATIONS ---
