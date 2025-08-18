@@ -489,14 +489,20 @@ public static class FixedMath
     {
         int bits = IntN<TBits>.BitsConst;
         if (bits < 2 || bits > 31)
-            throw new NotSupportedException($"Asin IntN : B2..B31 requis (bits={bits}).");
+            throw new NotSupportedException($"Asin<IntN> : B2..B31 requis (bits={bits}).");
 
-        int valQ16 =
-              bits == 17 ? v.Raw
-            : bits > 17 ? v.Raw >> (bits - 17)      // down-scale
-                         : v.Raw << (17 - bits);    // up-scale
+        // 1) sign-extend sur 'bits' pour être strictement bit-faithful
+        int raw = (v.Raw << (32 - bits)) >> (32 - bits);
 
-        return Q16_16AngleToBn(AsinLut4096Core(valQ16, bits), bits, true);
+        // 2) map Bn signé -> Q16 via alignement binaire (pas de division)
+        //    Convention historique: si 'bits == 17' alors raw est déjà en Q16 (±65536)
+        int valQ16 = (bits == 17) ? raw
+                    : (bits > 17) ? (raw >> (bits - 17))
+                                  : (raw << (17 - bits));
+
+        // 3) core LUT (piloté par les BITS D’ANGLE), puis mapping angle Bn (signé)
+        int q16 = AsinLut4096Core(valQ16, bits);
+        return Q16_16AngleToBn(q16, bits, signed: true);
     }
     #endregion
 
@@ -575,12 +581,14 @@ public static class FixedMath
         int bits = IntN<TBits>.BitsConst;
         if (bits < 2 || bits > 31)
             throw new NotSupportedException($"Acos<IntN> : B2..B31 requis (bits={bits}).");
-        int valQ16 =
-              bits == 17 ? v.Raw
-            : bits > 17 ? v.Raw >> (bits - 17)
-                        : v.Raw << (17 - bits);
 
-        return Q16_16AcosToBn(AcosLut4096Core(valQ16, bits), bits, true);
+        int raw = (v.Raw << (32 - bits)) >> (32 - bits);
+        int valQ16 = (bits == 17) ? raw
+                    : (bits > 17) ? (raw >> (bits - 17))
+                                  : (raw << (17 - bits));
+
+        int q16 = AcosLut4096Core(valQ16, bits);
+        return Q16_16AcosToBn(q16, bits, signed: false);
     }
     #endregion
 

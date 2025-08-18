@@ -347,8 +347,8 @@ namespace FixedEngine.Math
             var sin = UFixed<TUInt, TFrac>.Sin(angle);
             // Produit vectoriel "classique", wrap unsigned :
             return new UVec2<TUInt, TFrac>(
-                X * cos - Y * sin,
-                X * sin + Y * cos
+                X * (UFixed<TUInt, TFrac>)cos - Y * (UFixed<TUInt, TFrac>)sin,
+                X * (UFixed<TUInt, TFrac>)sin + Y * (UFixed<TUInt, TFrac>)cos
             );
         }
 
@@ -357,7 +357,7 @@ namespace FixedEngine.Math
         {
             var cos = UFixed<TUInt, TFrac>.Cos(angle);
             var sin = UFixed<TUInt, TFrac>.Sin(angle);
-            return new UVec2<TUInt, TFrac>(cos, sin);
+            return new UVec2<TUInt, TFrac>((UFixed<TUInt, TFrac>)cos, (UFixed<TUInt, TFrac>)sin);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

@@ -229,8 +229,8 @@ namespace FixedEngine.Math
             var sin = UFixed<TUInt, TFrac>.Sin(angle);
             // ⚠️ Ici, pas de signed, donc pas de -sin possible, on laisse wrap/overflow.
             return new UMat2x2<TUInt, TFrac>(
-                cos, sin,  // M11, M12
-                sin, cos   // M21, M22
+                (UFixed<TUInt, TFrac>)cos, (UFixed<TUInt, TFrac>)sin,  // M11, M12
+                (UFixed<TUInt, TFrac>)sin, (UFixed<TUInt, TFrac>)cos   // M21, M22
             );
         }
 

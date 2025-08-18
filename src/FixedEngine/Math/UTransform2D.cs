@@ -67,8 +67,8 @@ public struct UTransform2D<TUInt, TFrac>
             var cos = UFixed<TUInt, TFrac>.Cos(Rotation);
             var sin = UFixed<TUInt, TFrac>.Sin(Rotation);
             return new UMat2x2<TUInt, TFrac>(
-                cos * Scale.X, sin * Scale.Y,
-                sin * Scale.X, cos * Scale.Y
+                (UFixed<TUInt, TFrac>)cos * Scale.X, (UFixed<TUInt, TFrac>)sin * Scale.Y,
+                (UFixed<TUInt, TFrac>)sin * Scale.X, (UFixed<TUInt, TFrac>)cos * Scale.Y
             );
         }
     }
@@ -87,8 +87,8 @@ public struct UTransform2D<TUInt, TFrac>
             var sin = UFixed<TUInt, TFrac>.Sin(Rotation);
             // Rotation "inverse" = wrap unsigned
             return new UMat2x2<TUInt, TFrac>(
-                cos * invScaleX, sin * invScaleY,
-                sin * invScaleX, cos * invScaleY
+                (UFixed<TUInt, TFrac>)cos * invScaleX, (UFixed<TUInt, TFrac>)sin * invScaleY,
+                (UFixed<TUInt, TFrac>)sin * invScaleX, (UFixed<TUInt, TFrac>)cos * invScaleY
             );
         }
     }
