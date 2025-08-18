@@ -571,16 +571,16 @@ namespace FixedEngine.Math
          ==================================*/
         #region --- FONCTIONS TRIGONOMETRIQUES ---
 
-        public static UFixed<TUInt, TFrac> Sin(UFixed<TUInt, TFrac> angle)
-            => new UFixed<TUInt, TFrac>(FixedMath.Sin(angle));
-        public static UFixed<TUInt, TFrac> Cos(UFixed<TUInt, TFrac> angle)
-            => new UFixed<TUInt, TFrac>(FixedMath.Cos(angle));
-        public static UFixed<TUInt, TFrac> Tan(UFixed<TUInt, TFrac> angle)
-            => new UFixed<TUInt, TFrac>(FixedMath.Tan(angle));
+        public static Fixed<TUInt, TFrac> Sin(UFixed<TUInt, TFrac> angle)
+            => new Fixed<TUInt, TFrac>(FixedMath.Sin(angle));
+        public static Fixed<TUInt, TFrac> Cos(UFixed<TUInt, TFrac> angle)
+            => new Fixed<TUInt, TFrac>(FixedMath.Cos(angle));
+        public static Fixed<TUInt, TFrac> Tan(UFixed<TUInt, TFrac> angle)
+            => new Fixed<TUInt, TFrac>(FixedMath.Tan(angle));
 
         // Inverses
-        public static UFixed<TUInt, TFrac> Asin(UFixed<TUInt, TFrac> val)
-            => new UFixed<TUInt, TFrac>(FixedMath.Asin(val));
+        public static Fixed<TUInt, TFrac> Asin(UFixed<TUInt, TFrac> val)
+            => new Fixed<TUInt, TFrac>(FixedMath.Asin(val));
         public static UFixed<TUInt, TFrac> Acos(UFixed<TUInt, TFrac> val)
             => new UFixed<TUInt, TFrac>(FixedMath.Acos(val));
         public static UFixed<TUInt, TFrac> Atan(UFixed<TUInt, TFrac> val)

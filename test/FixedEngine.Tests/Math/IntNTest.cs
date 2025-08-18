@@ -1,4 +1,4 @@
-﻿using FixedEngine.Math; // ou le namespace où se trouve IntN
+﻿using FixedEngine.Math;
 using NUnit.Framework;
 using NUnit.Framework.Legacy;
 

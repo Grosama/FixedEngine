@@ -2,8 +2,6 @@
 using FixedEngine.Math;
 using FixedEngine.Math.Consts;
 using System;
-using System.Diagnostics;
-using System.Drawing;
 using System.Runtime.CompilerServices;
 
 public static class FixedMath
@@ -337,42 +335,14 @@ public static class FixedMath
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int Tan<TUInt, TFrac>(UFixed<TUInt, TFrac> angle)
         where TUInt : struct where TFrac : struct
-    {
-        int bits = BitsOf<TUInt>.Value + BitsOf<TFrac>.Value;
-        uint uraw = bits <= 14
-            ? (angle.Raw << (14 - bits)) & 0x3FFF
-            : (angle.Raw >> (bits - 14)) & 0x3FFF;
-
-        var sin = Sin(new UFixed<TUInt, TFrac>(uraw));
-        var cos = Cos(new UFixed<TUInt, TFrac>(uraw));
-
-        if (cos == 0)
-            return (sin > 0) ? int.MaxValue : int.MinValue;
-
-        int tan = (int)(((long)sin << 16) / cos);
-        return tan;
-    }
+        => Tan((UIntN<TUInt>)angle);
     #endregion
 
     #region --- TAN (Fixed) ---
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int Tan<TInt, TFrac>(Fixed<TInt, TFrac> angle)
         where TInt : struct where TFrac : struct
-    {
-        int bits = BitsOf<TInt>.Value + BitsOf<TFrac>.Value;
-        uint uraw = bits <= 14
-            ? ((uint)angle.Raw << (14 - bits)) & 0x3FFF
-            : ((uint)angle.Raw >> (bits - 14)) & 0x3FFF;
-
-        var sin = Sin(new Fixed<TInt, TFrac>((int)uraw));
-        var cos = Cos(new Fixed<TInt, TFrac>((int)uraw));
-
-        if (cos == 0)
-            return (sin > 0) ? int.MaxValue : int.MinValue;
-
-        int tan = (int)(((long)sin << 16) / cos);
-        return tan;
-    }
+        => Tan((IntN<TInt>)angle);
     #endregion
 
     #endregion
@@ -533,32 +503,42 @@ public static class FixedMath
     #region --- ASIN (UFixed) ---
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int Asin<TUInt, TFrac>(UFixed<TUInt, TFrac> v)
-        where TUInt : struct where TFrac : struct
+        where TUInt : struct
+        where TFrac : struct
     {
-        int fracBits = BitsOf<TFrac>.Value;
-        if (fracBits < 2 || fracBits > 31)
-            throw new NotSupportedException($"Asin<UFixed> : TFrac doit avoir entre 2 et 31 bits (actuel = {fracBits}).");
+        int F = UFixed<TUInt, TFrac>.FracBitsConst;    // bits fractionnaires
+        int Abits = IntN<TUInt>.BitsConst;             // résolution ANGLE (Bn)
+        if (Abits < 2 || Abits > 31)
+            throw new NotSupportedException($"Asin UFixed : angle B2..B31 requis (bits={Abits}).");
 
-        uint maxRaw = (1u << fracBits) - 1;
+        uint maxRaw = (uint)((1 << F) - 1);
         int valQ16 = (int)((((long)v.Raw * 2 - maxRaw) * 65536) / maxRaw);
-        return Q16_16AngleToBn(AsinLut4096Core(valQ16, fracBits), fracBits, true);
+
+        // core LUT Q16 -> angle Q16, puis mapping vers Bn signé
+        int q16 = AsinLut4096Core(valQ16, Abits);
+        return Q16_16AngleToBn(q16, Abits, signed: true);
     }
     #endregion
 
     #region --- ASIN (Fixed) ---
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int Asin<TInt, TFrac>(Fixed<TInt, TFrac> v)
-        where TInt : struct where TFrac : struct
+        where TInt : struct
+        where TFrac : struct
     {
-        int fracBits = BitsOf<TFrac>.Value;
-        if (fracBits < 2 || fracBits > 31)
-            throw new NotSupportedException($"Asin<Fixed> : TFrac doit avoir entre 2 et 31 bits (actuel = {fracBits}).");
+        int F = Fixed<TInt, TFrac>.FracBitsConst;      // bits fractionnaires (ex: 8 pour Q8.8)
+        int Abits = IntN<TInt>.BitsConst;              // résolution ANGLE (Bn)
+        if (Abits < 2 || Abits > 31)
+            throw new NotSupportedException($"Asin Fixed : angle B2..B31 requis (bits={Abits}).");
 
-        int valQ16 =
-              fracBits == 17 ? v.Raw
-            : fracBits > 17 ? v.Raw >> (fracBits - 17)
-                             : v.Raw << (17 - fracBits);
-        return Q16_16AngleToBn(AsinLut4096Core(valQ16, fracBits), fracBits, true);
+        // map QF -> Q16
+        int valQ16 = (F == 16) ? v.Raw
+                   : (F > 16) ? (v.Raw >> (F - 16))
+                              : (v.Raw << (16 - F));
+
+        // core LUT (renvoie l’angle en Q16), puis mapping vers Bn signé
+        int q16 = AsinLut4096Core(valQ16, Abits);
+        return Q16_16AngleToBn(q16, Abits, signed: true);
     }
     #endregion
 
@@ -609,13 +589,17 @@ public static class FixedMath
     public static int Acos<TUInt, TFrac>(UFixed<TUInt, TFrac> v)
         where TUInt : struct where TFrac : struct
     {
-        int fracBits = BitsOf<TFrac>.Value;
-        if (fracBits < 2 || fracBits > 31)
-            throw new NotSupportedException($"Acos<UFixed> : TFrac doit avoir entre 2 et 31 bits (actuel = {fracBits}).");
+        int F = BitsOf<TFrac>.Value;                 // bits fractionnaires (amplitude)
+        int Abits = IntN<TUInt>.BitsConst;           // résolution ANGLE (Bn)
+        if (Abits < 2 || Abits > 31)
+            throw new NotSupportedException($"Acos<UFixed> : angle B2..B31 requis (bits={Abits}).");
 
-        uint maxRaw = (1u << fracBits) - 1;
+        // map [0 .. (1<<F)-1] -> [-65536 .. +65536] en Q16
+        uint maxRaw = (uint)((1 << F) - 1);
         int valQ16 = (int)((((long)v.Raw * 2 - maxRaw) * 65536) / maxRaw);
-        return Q16_16AcosToBn(AcosLut4096Core(valQ16, fracBits), fracBits, false);
+
+        int q16 = AcosLut4096Core(valQ16, Abits);    // angle en Q16, plage [0..π]
+        return Q16_16AcosToBn(q16, Abits, signed: false);
     }
     #endregion
 
@@ -624,15 +608,18 @@ public static class FixedMath
     public static int Acos<TInt, TFrac>(Fixed<TInt, TFrac> v)
         where TInt : struct where TFrac : struct
     {
-        int fracBits = BitsOf<TFrac>.Value;
-        if (fracBits < 2 || fracBits > 31)
-            throw new NotSupportedException($"Acos<Fixed> : TFrac doit avoir entre 2 et 31 bits (actuel = {fracBits}).");
+        int F = BitsOf<TFrac>.Value;                 // bits fractionnaires (amplitude)
+        int Abits = IntN<TInt>.BitsConst;            // résolution ANGLE (Bn)
+        if (Abits < 2 || Abits > 31)
+            throw new NotSupportedException($"Acos<Fixed> : angle B2..B31 requis (bits={Abits}).");
 
-        int valQ16 =
-              fracBits == 17 ? v.Raw
-            : fracBits > 17 ? v.Raw >> (fracBits - 17)
-                             : v.Raw << (17 - fracBits);
-        return Q16_16AcosToBn(AcosLut4096Core(valQ16, fracBits), fracBits, true);
+        // map QF -> Q16
+        int valQ16 = (F == 16) ? v.Raw
+                   : (F > 16) ? (v.Raw >> (F - 16))
+                              : (v.Raw << (16 - F));
+
+        int q16 = AcosLut4096Core(valQ16, Abits);    // angle en Q16, plage [0..π]
+        return Q16_16AcosToBn(q16, Abits, signed: true);
     }
     #endregion
 
@@ -850,13 +837,14 @@ public static class FixedMath
         where TUInt : struct
         where TFrac : struct
     {
-        int fracBits = BitsOf<TFrac>.Value;
-        if (fracBits < 2)
-            throw new NotSupportedException("Atan2<UFixed> : TFrac doit être ≥ Q2.");
+        int F = UFixed<TUInt, TFrac>.FracBitsConst;   // échelle des valeurs (QF)
+        int Abits = IntN<TUInt>.BitsConst;            // résolution ANGLE (Bn)
+        if (Abits < 2 || Abits > 31)
+            throw new NotSupportedException($"Atan2<UFixed> : angle B2..B31 requis (bits={Abits}).");
 
-        uint scaleMax = (uint)(1 << fracBits);           // 1.0 en Q-format
-        int q16 = Atan2Core((int)y.Raw, (int)x.Raw, scaleMax, fracBits);
-        return Q16_16AngleToBn_Atan2(q16, fracBits, false);
+        uint scaleMax = (uint)(1 << F);               // 1.0 en QF
+        int q16 = Atan2Core((int)y.Raw, (int)x.Raw, scaleMax, Abits);
+        return Q16_16AngleToBn_Atan2(q16, Abits, signed: false); // [0..2π) pour unsigned
     }
     #endregion
 
@@ -866,13 +854,14 @@ public static class FixedMath
         where TInt : struct
         where TFrac : struct
     {
-        int fracBits = BitsOf<TFrac>.Value;
-        if (fracBits < 2)
-            throw new NotSupportedException("Atan2<Fixed> : TFrac doit être ≥ Q2.");
+        int F = Fixed<TInt, TFrac>.FracBitsConst;     // échelle des valeurs (QF)
+        int Abits = IntN<TInt>.BitsConst;             // résolution ANGLE (Bn)
+        if (Abits < 2 || Abits > 31)
+            throw new NotSupportedException($"Atan2<Fixed> : angle B2..B31 requis (bits={Abits}).");
 
-        uint scaleMax = (uint)(1 << fracBits);           // 1.0 en Q-format
-        int q16 = Atan2Core(y.Raw, x.Raw, scaleMax, fracBits);
-        return Q16_16AngleToBn_Atan2(q16, fracBits, true);
+        uint scaleMax = (uint)(1 << F);               // 1.0 en QF
+        int q16 = Atan2Core(y.Raw, x.Raw, scaleMax, Abits);
+        return Q16_16AngleToBn_Atan2(q16, Abits, signed: true);  // [-π..+π] pour signed
     }
     #endregion
 
