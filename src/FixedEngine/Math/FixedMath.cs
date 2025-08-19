@@ -357,34 +357,78 @@ public static class FixedMath
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int AsinLutCore(int valQ16, int bits)
     {
-        // ---------- Constantes LUT ----------
         const int LUT_BITS = 12;
-        const int LUT_MASK = (1 << LUT_BITS) - 1;   // 0xFFF
-        var lut = AsinLUT4096.LUT;                  // θ en Q16
+        const int LUT_MASK = (1 << LUT_BITS) - 1;   // 4095
+        var lut = AsinLUT4096.LUT;                  // θ en Q16 (radians)
 
-        // ---------- 1) Clamp domaine ----------
+        // 1) Clamp domaine
         if (valQ16 <= -65536) return -TrigConsts.PI_2_Q[16];
         if (valQ16 >= 65536) return TrigConsts.PI_2_Q[16];
 
-        // ---------- 2) Index + fraction ----------
-        // x ∈ [-65536, +65536]  →  idxFrac ∈ [0, 4095]
+        // 2) Index + fraction (mapping [-1..+1] → [0..4095])
         long idxFracQ16 = ((long)(valQ16 + 65536) * LUT_MASK) << 16; // Q16.16
-        idxFracQ16 /= 131072;                                        // div / (2^17)
+        idxFracQ16 /= 131072;                                        // / 2^17
 
-        int idx = (int)(idxFracQ16 >> 16);      // partie entière 0..4094
-        int tQ16 = (int)(idxFracQ16 & 0xFFFF);   // fraction    0..65535
+        int idx = (int)(idxFracQ16 >> 16);     // 0..4094
+        int tQ16 = (int)(idxFracQ16 & 0xFFFF);  // 0..65535
 
-        // ---------- 3) Lookup / interpolation ----------
-        if (bits <= 14)
-            return lut[idx];                      // bit-faithful
+        // 3) Mode rétro: B2..B6 → nearest neighbor (écrase les horreurs B7..B14 vues au test)
+        if (bits <= 6)
+        {
+            if (tQ16 >= 32768 && idx < LUT_MASK) idx++;   // nearest, pas floor
+            return lut[idx];
+        }
 
-        // Catmull-Rom sur l’angle
+        // 4) Mode interpolé: B7+ → Catmull, avec routage "tail" pour la fin de courbe
+        int ax = valQ16 < 0 ? -valQ16 : valQ16;          // |x|
+        int x0Tail = AsinLUT_Tail2048.X0_Q;              // sin(75°) en Q16.16
+        if (ax >= x0Tail)
+        {
+            int y = AsinTailEval_Q16(ax);                // asin(|x|) via LUT tail
+            return (valQ16 < 0) ? -y : y;                // impaire
+        }
+
+        // Catmull sur la LUT 4096
         int p0 = lut[(idx == 0) ? 0 : idx - 1];
         int p1 = lut[idx];
         int p2 = lut[Math.Min(LUT_MASK, idx + 1)];
         int p3 = lut[Math.Min(LUT_MASK, idx + 2)];
-
         return FixedMath.CatmullRom(p0, p1, p2, p3, tQ16);
+    }
+
+
+    // ===== ASIN TAIL EVAL (x ∈ [sin(75°), 1.0], Q16.16) =====
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int AsinTailEval_Q16(int xQ16)
+    {
+        const int QF = 16;
+        int X0 = AsinLUT_Tail2048.X0_Q;  // sin(75°) en Q16.16
+        int X1 = AsinLUT_Tail2048.X1_Q;  // 1.0 en Q16.16
+        int N = AsinLUT_Tail2048.N;    // 2048
+        int PAD = AsinLUT_Tail2048.PAD;  // 1
+        var V = AsinLUT_Tail2048.LUT;
+
+        // clamp sécurité
+        if (xQ16 <= X0) return V[PAD + 0];
+        if (xQ16 >= X1) return V[PAD + (N - 1)];
+
+        // u = (x - X0) / (X1 - X0) en Q16
+        long num = ((long)xQ16 - X0) << QF;
+        int uQ16 = (int)(num / (X1 - X0));          // 0..65535
+
+        // pos = u * (N-1)
+        long posQ16 = (long)uQ16 * (N - 1);
+        int idx = (int)(posQ16 >> QF);              // 0..N-2
+        int tQ16 = (int)(posQ16 & 0xFFFF);          // 0..65535
+
+        // fenêtre Catmull avec padding "physique" dans la table (2050 valeurs)
+        int baseIdx = PAD + idx;
+        int p0 = V[baseIdx - 1];
+        int p1 = V[baseIdx + 0];
+        int p2 = V[baseIdx + 1];
+        int p3 = V[baseIdx + 2];
+
+        return CatmullRom(p0, p1, p2, p3, tQ16);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -456,11 +500,16 @@ public static class FixedMath
         else
         {
 
-            int max = 1 << (bits - 1);
-            long mapped = ((long)q16_16 * max + (TrigConsts.PI_Q[16] >> 1)) / TrigConsts.PI_Q[16];
-            int result = (int)mapped;
+            // unsigned: [0..π] → [0..halfTurn], avec densité ~ (2^bits−1) sur π (comme asin)
+            int halfTurn = 1 << (bits - 1);                 // ex: 128 en B8
+            int twoMaxPlusOne = (halfTurn << 1) - 1;        // = 2^bits - 1
+
+            long scaled = ((long)q16_16 * twoMaxPlusOne + (TrigConsts.PI_Q[16] >> 1))
+                          / TrigConsts.PI_Q[16];            // 0..(2^bits-1), arrondi
+
+            int result = (int)((scaled + 1) >> 1);          // /2 avec arrondi au plus proche
             if (result < 0) result = 0;
-            if (result > max) result = max;
+            if (result > halfTurn) result = halfTurn;
             return result;
         }
     }
@@ -479,7 +528,7 @@ public static class FixedMath
         // map [0..max] -> [-65536..+65536] (rétro-faithful en entiers)
         int valQ16 = (int)((((long)v.Raw * 2 - maxRaw) * 65536L) / maxRaw);
 
-        int acosQ16 = AcosLut4096Core(valQ16, bits);
+        int acosQ16 = AcosLutCore(valQ16, bits);
         int asinQ16 = TrigConsts.PI_2_Q[16] - acosQ16;
 
         // asin sort un angle SIGNÉ ([-pi/2..+pi/2]) -> Bn signé
@@ -502,7 +551,7 @@ public static class FixedMath
                                 : (raw << (17 - bits));
 
         // 2) asin(x) = pi/2 - acos(x), donc on utilise le core ACOS plus stable aux bords
-        int acosQ16 = AcosLut4096Core(valQ16, bits);
+        int acosQ16 = AcosLutCore(valQ16, bits);
         int asinQ16 = TrigConsts.PI_2_Q[16] - acosQ16;
 
         // 3) angle signé [-pi/2..+pi/2] -> Bn signé
@@ -523,13 +572,13 @@ public static class FixedMath
         if (F < 1 || F > 31)
             throw new NotSupportedException($"Asin UFixed : F (bits fractionnaires) doit être dans [1..31] (F={F}).");
 
-        // map [0..(2^F−1)] -> [-65536..+65536] en Q16, avec ARRONDI
+        // map [0..(2^F−1)] -> [-65536..+65536] en Q16, en TRUNC (cohérent avec UIntN et Acos)
         uint maxRaw = (1u << F) - 1u;
         long num = ((long)v.Raw * 2L - (long)maxRaw) * 65536L;
-        int valQ16 = (int)((num + ((long)maxRaw >> 1)) / (long)maxRaw);
+        int valQ16 = (int)(num / (long)maxRaw);
 
         // asin = π/2 − acos (core Q16)
-        int acosQ16 = AcosLut4096Core(valQ16, Abits);
+        int acosQ16 = AcosLutCore(valQ16, Abits);
         int asinQ16 = TrigConsts.PI_2_Q[16] - acosQ16;
 
         // angle signé [-π/2..+π/2] -> Bn signé
@@ -556,7 +605,7 @@ public static class FixedMath
                               : (v.Raw << (16 - F));
 
         // asin = pi/2 - acos (core LUT en Q16)
-        int acosQ16 = AcosLut4096Core(valQ16, Abits);
+        int acosQ16 = AcosLutCore(valQ16, Abits);
         int asinQ16 = TrigConsts.PI_2_Q[16] - acosQ16;
 
         // angle signé [-pi/2..+pi/2] -> Bn signé
@@ -567,7 +616,7 @@ public static class FixedMath
     // --- ACOS ---
     #region --- ACOS LUT Retro ---
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int AcosLut4096Core(int valQ16, int bits)
+    private static int AcosLutCore(int valQ16, int bits)
     {
         // Clamp & bit-faithful/interp exactement comme Asin
         int asin = AsinLutCore(valQ16, bits);                // asin(x) en Q16
@@ -586,7 +635,7 @@ public static class FixedMath
         int valQ16 = (int)((((long)v.Raw * 2 - maxRaw) * 65536) / maxRaw);
 
 
-        return Q16_16AcosToBn(AcosLut4096Core(valQ16, bits), bits, false);
+        return Q16_16AcosToBn(AcosLutCore(valQ16, bits), bits, false);
     }
     #endregion
 
@@ -603,7 +652,7 @@ public static class FixedMath
                     : (bits > 17) ? (raw >> (bits - 17))
                                   : (raw << (17 - bits));
 
-        int q16 = AcosLut4096Core(valQ16, bits);
+        int q16 = AcosLutCore(valQ16, bits);
         return Q16_16AcosToBn(q16, bits, signed: false);
     }
     #endregion
@@ -622,7 +671,7 @@ public static class FixedMath
         uint maxRaw = (uint)((1 << F) - 1);
         int valQ16 = (int)((((long)v.Raw * 2 - maxRaw) * 65536) / maxRaw);
 
-        int q16 = AcosLut4096Core(valQ16, Abits);    // angle en Q16, plage [0..π]
+        int q16 = AcosLutCore(valQ16, Abits);    // angle en Q16, plage [0..π]
         return Q16_16AcosToBn(q16, Abits, signed: false);
     }
     #endregion
@@ -642,8 +691,8 @@ public static class FixedMath
                    : (F > 16) ? (v.Raw >> (F - 16))
                               : (v.Raw << (16 - F));
 
-        int q16 = AcosLut4096Core(valQ16, Abits);    // angle en Q16, plage [0..π]
-        return Q16_16AcosToBn(q16, Abits, signed: true);
+        int q16 = AcosLutCore(valQ16, Abits);    // angle en Q16, plage [0..π]
+        return Q16_16AcosToBn(q16, Abits, signed: false);
     }
     #endregion
 
