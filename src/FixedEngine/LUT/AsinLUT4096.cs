@@ -1,10 +1,15 @@
-﻿// Table de sinus sur un quart de tour (0 à pi/2), 4096 cases, Q16.16 (int)
+﻿// Table de valeurs arcsin(x) sur l’intervalle [-1.0 ; +1.0],
+// échantillonnée uniformément en 4096 pas,
+// stockée en Q16.16 (int). 
+// La première valeur correspond à asin(-1) ≈ -π/2,
+// la dernière à asin(+1) ≈ +π/2.
 namespace FixedEngine.LUT
 {
     public static class AsinLUT4096
     {
         /// <summary>
-        /// Table Asin sur 1/4 de tour (0 à pi/2), 4096 cases, Q16.16 (valeur max 65536 pour 1.0)
+        /// Table de lookup pour asin(x), couvrant x ∈ [-1, +1],
+        /// avec 4096 échantillons uniformes. Résultats stockés en Q16.16.
         /// </summary>
         public static readonly int[] LUT = new int[4096] {
             -102944, -100895, -100047, -99396, -98847, -98363, -97925, -97523,

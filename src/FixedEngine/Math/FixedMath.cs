@@ -355,7 +355,7 @@ public static class FixedMath
     // --- ASIN ---
     #region --- ASIN LUT Retro ---
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int AsinLut4096Core(int valQ16, int bits)
+    private static int AsinLutCore(int valQ16, int bits)
     {
         // ---------- Constantes LUT ----------
         const int LUT_BITS = 12;
@@ -472,14 +472,18 @@ public static class FixedMath
     {
         int bits = UIntN<TBits>.BitsConst;
         if (bits < 2 || bits > 31)
-            throw new NotSupportedException($"Asin UIntN : B2..B31 requis (bits={bits}).");
+            throw new NotSupportedException($"Asin<UIntN> : B2..B31 requis (bits={bits}).");
 
         uint maxRaw = (1u << bits) - 1;
-        // map [0,max] -> [-65536,+65536]  (rétro-faithful)
-        //int valQ16 = (int)((((long)v.Raw * 2 - maxRaw) * 65536) / maxRaw);
-        int valQ16 = (int)(((long)v.Raw * 2 - maxRaw) * 65536 / maxRaw);
-        //int valQ16 = ((int)v.Raw * 2 - (int)maxRaw) * 65536 / (int)maxRaw;
-        return Q16_16AngleToBn(AsinLut4096Core(valQ16, bits), bits, true);
+
+        // map [0..max] -> [-65536..+65536] (rétro-faithful en entiers)
+        int valQ16 = (int)((((long)v.Raw * 2 - maxRaw) * 65536L) / maxRaw);
+
+        int acosQ16 = AcosLut4096Core(valQ16, bits);
+        int asinQ16 = TrigConsts.PI_2_Q[16] - acosQ16;
+
+        // asin sort un angle SIGNÉ ([-pi/2..+pi/2]) -> Bn signé
+        return Q16_16AngleToBn(asinQ16, bits, signed: true);
     }
     #endregion
 
@@ -491,18 +495,18 @@ public static class FixedMath
         if (bits < 2 || bits > 31)
             throw new NotSupportedException($"Asin<IntN> : B2..B31 requis (bits={bits}).");
 
-        // 1) sign-extend sur 'bits' pour être strictement bit-faithful
+        // 1) bit-faithful -> Q16
         int raw = (v.Raw << (32 - bits)) >> (32 - bits);
-
-        // 2) map Bn signé -> Q16 via alignement binaire (pas de division)
-        //    Convention historique: si 'bits == 17' alors raw est déjà en Q16 (±65536)
         int valQ16 = (bits == 17) ? raw
-                    : (bits > 17) ? (raw >> (bits - 17))
-                                  : (raw << (17 - bits));
+                  : (bits > 17) ? (raw >> (bits - 17))
+                                : (raw << (17 - bits));
 
-        // 3) core LUT (piloté par les BITS D’ANGLE), puis mapping angle Bn (signé)
-        int q16 = AsinLut4096Core(valQ16, bits);
-        return Q16_16AngleToBn(q16, bits, signed: true);
+        // 2) asin(x) = pi/2 - acos(x), donc on utilise le core ACOS plus stable aux bords
+        int acosQ16 = AcosLut4096Core(valQ16, bits);
+        int asinQ16 = TrigConsts.PI_2_Q[16] - acosQ16;
+
+        // 3) angle signé [-pi/2..+pi/2] -> Bn signé
+        return Q16_16AngleToBn(asinQ16, bits, signed: true);
     }
     #endregion
 
@@ -512,17 +516,24 @@ public static class FixedMath
         where TUInt : struct
         where TFrac : struct
     {
-        int F = UFixed<TUInt, TFrac>.FracBitsConst;    // bits fractionnaires
-        int Abits = IntN<TUInt>.BitsConst;             // résolution ANGLE (Bn)
+        int F = UFixed<TUInt, TFrac>.FracBitsConst;   // ex: 8 pour Q0.8
+        int Abits = IntN<TUInt>.BitsConst;            // résolution ANGLE (Bn) — PAS F
         if (Abits < 2 || Abits > 31)
             throw new NotSupportedException($"Asin UFixed : angle B2..B31 requis (bits={Abits}).");
+        if (F < 1 || F > 31)
+            throw new NotSupportedException($"Asin UFixed : F (bits fractionnaires) doit être dans [1..31] (F={F}).");
 
-        uint maxRaw = (uint)((1 << F) - 1);
-        int valQ16 = (int)((((long)v.Raw * 2 - maxRaw) * 65536) / maxRaw);
+        // map [0..(2^F−1)] -> [-65536..+65536] en Q16, avec ARRONDI
+        uint maxRaw = (1u << F) - 1u;
+        long num = ((long)v.Raw * 2L - (long)maxRaw) * 65536L;
+        int valQ16 = (int)((num + ((long)maxRaw >> 1)) / (long)maxRaw);
 
-        // core LUT Q16 -> angle Q16, puis mapping vers Bn signé
-        int q16 = AsinLut4096Core(valQ16, Abits);
-        return Q16_16AngleToBn(q16, Abits, signed: true);
+        // asin = π/2 − acos (core Q16)
+        int acosQ16 = AcosLut4096Core(valQ16, Abits);
+        int asinQ16 = TrigConsts.PI_2_Q[16] - acosQ16;
+
+        // angle signé [-π/2..+π/2] -> Bn signé
+        return Q16_16AngleToBn(asinQ16, Abits, signed: true);
     }
     #endregion
 
@@ -532,19 +543,24 @@ public static class FixedMath
         where TInt : struct
         where TFrac : struct
     {
-        int F = Fixed<TInt, TFrac>.FracBitsConst;      // bits fractionnaires (ex: 8 pour Q8.8)
-        int Abits = IntN<TInt>.BitsConst;              // résolution ANGLE (Bn)
+        int F = Fixed<TInt, TFrac>.FracBitsConst;   // ex: 8 pour Q8.8
+        int Abits = IntN<TInt>.BitsConst;           // résolution ANGLE (Bn)
         if (Abits < 2 || Abits > 31)
             throw new NotSupportedException($"Asin Fixed : angle B2..B31 requis (bits={Abits}).");
+        if (F < 0 || F > 31)
+            throw new NotSupportedException($"Asin Fixed : F (bits fractionnaires) doit être dans [0..31] (F={F}).");
 
-        // map QF -> Q16
+        // QF -> Q16 (bit-faithful en signé), avec shifts sûrs
         int valQ16 = (F == 16) ? v.Raw
                    : (F > 16) ? (v.Raw >> (F - 16))
                               : (v.Raw << (16 - F));
 
-        // core LUT (renvoie l’angle en Q16), puis mapping vers Bn signé
-        int q16 = AsinLut4096Core(valQ16, Abits);
-        return Q16_16AngleToBn(q16, Abits, signed: true);
+        // asin = pi/2 - acos (core LUT en Q16)
+        int acosQ16 = AcosLut4096Core(valQ16, Abits);
+        int asinQ16 = TrigConsts.PI_2_Q[16] - acosQ16;
+
+        // angle signé [-pi/2..+pi/2] -> Bn signé
+        return Q16_16AngleToBn(asinQ16, Abits, signed: true);
     }
     #endregion
 
@@ -554,7 +570,7 @@ public static class FixedMath
     private static int AcosLut4096Core(int valQ16, int bits)
     {
         // Clamp & bit-faithful/interp exactement comme Asin
-        int asin = AsinLut4096Core(valQ16, bits);                // asin(x) en Q16
+        int asin = AsinLutCore(valQ16, bits);                // asin(x) en Q16
         return TrigConsts.PI_2_Q[16] - asin;                     // acos(x) = π/2 - asin(x)
     }
     #endregion
