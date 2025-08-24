@@ -1387,124 +1387,212 @@ namespace FixedEngine.Tests.Math
         }
         #endregion
 
+        #region --- ASIN (UIntN) ----
+        // Helper : appelle FixedMath.Asin pour le bon TBits
+        private static int Asin_UIntN_ByBits(int bits, uint raw)
+        {
+            switch (bits)
+            {
+                case 2: return FixedMath.Asin(new UIntN<B2>(raw));
+                case 3: return FixedMath.Asin(new UIntN<B3>(raw));
+                case 4: return FixedMath.Asin(new UIntN<B4>(raw));
+                case 5: return FixedMath.Asin(new UIntN<B5>(raw));
+                case 6: return FixedMath.Asin(new UIntN<B6>(raw));
+                case 7: return FixedMath.Asin(new UIntN<B7>(raw));
+                case 8: return FixedMath.Asin(new UIntN<B8>(raw));
+                case 9: return FixedMath.Asin(new UIntN<B9>(raw));
+                case 10: return FixedMath.Asin(new UIntN<B10>(raw));
+                case 11: return FixedMath.Asin(new UIntN<B11>(raw));
+                case 12: return FixedMath.Asin(new UIntN<B12>(raw));
+                case 13: return FixedMath.Asin(new UIntN<B13>(raw));
+                case 14: return FixedMath.Asin(new UIntN<B14>(raw));
+                case 15: return FixedMath.Asin(new UIntN<B15>(raw));
+                case 16: return FixedMath.Asin(new UIntN<B16>(raw));
+                case 17: return FixedMath.Asin(new UIntN<B17>(raw));
+                case 18: return FixedMath.Asin(new UIntN<B18>(raw));
+                case 19: return FixedMath.Asin(new UIntN<B19>(raw));
+                case 20: return FixedMath.Asin(new UIntN<B20>(raw));
+                case 21: return FixedMath.Asin(new UIntN<B21>(raw));
+                case 22: return FixedMath.Asin(new UIntN<B22>(raw));
+                case 23: return FixedMath.Asin(new UIntN<B23>(raw));
+                case 24: return FixedMath.Asin(new UIntN<B24>(raw));
+                case 25: return FixedMath.Asin(new UIntN<B25>(raw));
+                case 26: return FixedMath.Asin(new UIntN<B26>(raw));
+                case 27: return FixedMath.Asin(new UIntN<B27>(raw));
+                case 28: return FixedMath.Asin(new UIntN<B28>(raw));
+                case 29: return FixedMath.Asin(new UIntN<B29>(raw));
+                case 30: return FixedMath.Asin(new UIntN<B30>(raw));
+                case 31: return FixedMath.Asin(new UIntN<B31>(raw));
+                default: throw new ArgumentOutOfRangeException(nameof(bits));
+            }
+        }
+
+        // --- Helper: fabrique raw pour viser sin(thetaDeg) ---
+        private static uint BuildRawForSinDeg(int bits, double thetaDeg)
+        {
+            // x = sin(theta) dans [-1..+1]
+            double x = System.Math.Sin(thetaDeg * System.Math.PI / 180.0);
+            uint maxU = (uint)((1 << bits) - 1);
+            // raw ≈ round( (x+1)/2 * max )
+            double u = (x + 1.0) * 0.5 * maxU;
+            long r = (long)System.Math.Round(u, MidpointRounding.AwayFromZero);
+            if (r < 0) r = 0;
+            if (r > maxU) r = maxU;
+            return (uint)r;
+        }
+
+        [Test]
+        public void Asin_UIntN_B2toB31_AtAngles_ErrorTable()
+        {
+            var angles = new[] { 30.0, 45.0, 60.0, 75.0, 89.0, 90.0 };
+
+            foreach (var targetDeg in angles)
+            {
+                TestContext.Out.WriteLine($"\n=== θ = {targetDeg}° ===");
+                TestContext.Out.WriteLine("Bn\tRaw\t\t x\t\tasinBn\tdeg\t\tΔdeg");
+
+                for (int bits = 2; bits <= 31; bits++)
+                {
+                    uint maxU = (uint)((1 << bits) - 1);
+                    int maxSigned = (1 << (bits - 1)) - 1;
+
+                    uint raw = BuildRawForSinDeg(bits, targetDeg);
+
+                    // x réellement injecté par le mapping utilisé par Asin(UIntN):
+                    // x = (2*raw - max) / max
+                    double x = ((2.0 * raw) - maxU) / maxU;
+
+                    int asinBn = Asin_UIntN_ByBits(bits, raw);
+
+                    // Bn signé -> degrés (fenêtre [-90..+90])
+                    double deg = asinBn * (90.0 / maxSigned);
+
+                    double diff = deg - targetDeg;
+
+                    TestContext.Out.WriteLine(
+                        $"B{bits}\t{raw}\t{x,8:F6}\t{asinBn}\t{deg,8:F3}\t{diff,8:F3}");
+                }
+            }
+        }
+        #endregion
 
         // ----- ACOS -----
         #region --- ACOS LUT Retro (UIntN)
         [Test]
-        public void Acos_UIntN_B2toB31_MaxAngleError()
-        {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
-            string report = "\nBn\tMaxAngleErrDeg\tMaxAngleErrRad\tMaxAngleErrTicks\tAtDeg";
-
-            static long Gcd(long a, long b) { while (b != 0) { long t = a % b; a = b; b = t; } return System.Math.Abs(a); }
-
-            static int ValQ16ToRaw_UIntN_Trunc(int valQ16, int bits)
-            {
-                long maxRaw = (1L << bits) - 1L;
-                long rawApprox = (valQ16 * maxRaw) / 65536L;   // trunc
-                long raw = (rawApprox + maxRaw) / 2L;
-                if (raw < 0) raw = 0;
-                if (raw > maxRaw) raw = maxRaw;
-                return (int)raw;
-            }
-
-            for (int bits = 2; bits <= 31; bits++)
-            {
-                var tagType = asm.GetType($"FixedEngine.Math.B{bits}");
-                if (tagType == null) { Console.WriteLine($"Type B{bits} absent : SKIP"); continue; }
-
-                var valType = typeof(UIntN<>).MakeGenericType(tagType);
-                var miAcos = typeof(FixedMath).GetMethods()
-                    .First(m => m.Name == "Acos"
-                             && m.IsGenericMethod
-                             && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(UIntN<>))
-                    .MakeGenericMethod(tagType);
-
-                int maxRaw = (1 << bits) - 1;
-                int minRaw = 0;
-                long domain = (long)maxRaw - (long)minRaw + 1;      // = 2^bits
-                int samples = (domain <= 2_000_000L) ? (int)domain : 1_000_000;
-
-                // Densité angulaire unsigned sur [0..π]
-                double ticksToRad = System.Math.PI / (1u << (bits - 1));
-
-                long stride = 1_103_515_245L % domain; if (stride <= 0) stride += domain;
-                if ((stride & 1) == 0) stride++;
-                while (Gcd(stride, domain) != 1) { stride += 2; if (stride >= domain) stride -= domain; }
-
-                int xTailQ16 = (int)System.Math.Round(System.Math.Sin(System.Math.PI * 75.0 / 180.0) * 65536.0);
-                int[] offsetsQ16 = { -256, -128, -64, -32, -16, -8, -4, -1, 0, 1, 4, 8, 16, 32, 64, 128, 256 };
-
-                var seen = new System.Collections.Generic.HashSet<int>();
-                seen.Add(minRaw);
-                seen.Add(maxRaw);
-                seen.Add(maxRaw >> 1); // centre (~0 rad)
-
-                foreach (var off in offsetsQ16)
+                public void Acos_UIntN_B2toB31_MaxAngleError()
                 {
-                    int rawPos = ValQ16ToRaw_UIntN_Trunc(xTailQ16 + off, bits);
-                    seen.Add(rawPos);
-                    if (rawPos + 1 <= maxRaw) seen.Add(rawPos + 1);
+                    var asm = typeof(FixedEngine.Math.B2).Assembly;
+                    string report = "\nBn\tMaxAngleErrDeg\tMaxAngleErrRad\tMaxAngleErrTicks\tAtDeg";
 
-                    int rawNeg = ValQ16ToRaw_UIntN_Trunc(-(xTailQ16 + off), bits);
-                    seen.Add(rawNeg);
-                    if (rawNeg + 1 <= maxRaw) seen.Add(rawNeg + 1);
+                    static long Gcd(long a, long b) { while (b != 0) { long t = a % b; a = b; b = t; } return System.Math.Abs(a); }
+
+                    static int ValQ16ToRaw_UIntN_Trunc(int valQ16, int bits)
+                    {
+                        long maxRaw = (1L << bits) - 1L;
+                        long rawApprox = (valQ16 * maxRaw) / 65536L;   // trunc
+                        long raw = (rawApprox + maxRaw) / 2L;
+                        if (raw < 0) raw = 0;
+                        if (raw > maxRaw) raw = maxRaw;
+                        return (int)raw;
+                    }
+
+                    for (int bits = 2; bits <= 31; bits++)
+                    {
+                        var tagType = asm.GetType($"FixedEngine.Math.B{bits}");
+                        if (tagType == null) { Console.WriteLine($"Type B{bits} absent : SKIP"); continue; }
+
+                        var valType = typeof(UIntN<>).MakeGenericType(tagType);
+                        var miAcos = typeof(FixedMath).GetMethods()
+                            .First(m => m.Name == "Acos"
+                                     && m.IsGenericMethod
+                                     && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(UIntN<>))
+                            .MakeGenericMethod(tagType);
+
+                        int maxRaw = (1 << bits) - 1;
+                        int minRaw = 0;
+                        long domain = (long)maxRaw - (long)minRaw + 1;      // = 2^bits
+                        int samples = (domain <= 2_000_000L) ? (int)domain : 1_000_000;
+
+                        // Densité angulaire unsigned sur [0..π]
+                        double ticksToRad = System.Math.PI / (1u << (bits - 1));
+
+                        long stride = 1_103_515_245L % domain; if (stride <= 0) stride += domain;
+                        if ((stride & 1) == 0) stride++;
+                        while (Gcd(stride, domain) != 1) { stride += 2; if (stride >= domain) stride -= domain; }
+
+                        int xTailQ16 = (int)System.Math.Round(System.Math.Sin(System.Math.PI * 75.0 / 180.0) * 65536.0);
+                        int[] offsetsQ16 = { -256, -128, -64, -32, -16, -8, -4, -1, 0, 1, 4, 8, 16, 32, 64, 128, 256 };
+
+                        var seen = new System.Collections.Generic.HashSet<int>();
+                        seen.Add(minRaw);
+                        seen.Add(maxRaw);
+                        seen.Add(maxRaw >> 1); // centre (~0 rad)
+
+                        foreach (var off in offsetsQ16)
+                        {
+                            int rawPos = ValQ16ToRaw_UIntN_Trunc(xTailQ16 + off, bits);
+                            seen.Add(rawPos);
+                            if (rawPos + 1 <= maxRaw) seen.Add(rawPos + 1);
+
+                            int rawNeg = ValQ16ToRaw_UIntN_Trunc(-(xTailQ16 + off), bits);
+                            seen.Add(rawNeg);
+                            if (rawNeg + 1 <= maxRaw) seen.Add(rawNeg + 1);
+                        }
+
+                        int bestTicks = 0; double bestDeg = 0, bestRad = 0, atDeg = 0;
+
+                        // 1) Hotspots
+                        foreach (int raw in seen)
+                        {
+                            var valObj = Activator.CreateInstance(valType, raw);
+                            int acosBn = (int)miAcos.Invoke(null, new[] { valObj });
+
+                            // Référence double: map UIntN -> Q16 (trunc), acos, puis map unsigned
+                            int valQ16 = (int)((((long)raw * 2 - maxRaw) * 65536L) / maxRaw);
+                            double x = System.Math.Clamp(valQ16 / 65536.0, -1.0, 1.0);
+                            double acosRadRef = System.Math.Acos(x);
+                            int expectedQ16 = (int)System.Math.Round(acosRadRef * 65536.0);
+                            int expectedBn = FixedMath.Q16_16AcosToBn(expectedQ16, bits, signed: false);
+
+                            int diffTicks = System.Math.Abs(acosBn - expectedBn);
+                            double diffRad = diffTicks * ticksToRad;
+                            double diffDeg = diffRad * (180.0 / System.Math.PI);
+
+                            if (diffDeg > bestDeg) { bestDeg = diffDeg; bestRad = diffRad; bestTicks = diffTicks; atDeg = acosRadRef * 180.0 / System.Math.PI; }
+                        }
+
+                        // 2) Uniform stride sur le reste
+                        long idx = 0;
+                        int remaining = System.Math.Max(0, samples - seen.Count);
+                        for (int i = 0; i < remaining; i++)
+                        {
+                            int raw = (int)(minRaw + idx);
+                            idx += stride; if (idx >= domain) idx -= domain;
+                            if (!seen.Add(raw)) continue;
+
+                            var valObj = Activator.CreateInstance(valType, raw);
+                            int acosBn = (int)miAcos.Invoke(null, new[] { valObj });
+
+                            int valQ16 = (int)((((long)raw * 2 - maxRaw) * 65536L) / maxRaw);
+                            double x = System.Math.Clamp(valQ16 / 65536.0, -1.0, 1.0);
+                            double acosRadRef = System.Math.Acos(x);
+                            int expectedQ16 = (int)System.Math.Round(acosRadRef * 65536.0);
+                            int expectedBn = FixedMath.Q16_16AcosToBn(expectedQ16, bits, signed: false);
+
+                            int diffTicks = System.Math.Abs(acosBn - expectedBn);
+                            double diffRad = diffTicks * ticksToRad;
+                            double diffDeg = diffRad * (180.0 / System.Math.PI);
+
+                            if (diffDeg > bestDeg) { bestDeg = diffDeg; bestRad = diffRad; bestTicks = diffTicks; atDeg = acosRadRef * 180.0 / System.Math.PI; }
+                        }
+
+                        report += $"\nB{bits}\t{bestDeg:0.00000}\t{bestRad:0.00000}\t{bestTicks}\t{atDeg:0.###}";
+                    }
+
+                    Console.WriteLine(report);
+                    Assert.Pass(report);
                 }
-
-                int bestTicks = 0; double bestDeg = 0, bestRad = 0, atDeg = 0;
-
-                // 1) Hotspots
-                foreach (int raw in seen)
-                {
-                    var valObj = Activator.CreateInstance(valType, raw);
-                    int acosBn = (int)miAcos.Invoke(null, new[] { valObj });
-
-                    // Référence double: map UIntN -> Q16 (trunc), acos, puis map unsigned
-                    int valQ16 = (int)((((long)raw * 2 - maxRaw) * 65536L) / maxRaw);
-                    double x = System.Math.Clamp(valQ16 / 65536.0, -1.0, 1.0);
-                    double acosRadRef = System.Math.Acos(x);
-                    int expectedQ16 = (int)System.Math.Round(acosRadRef * 65536.0);
-                    int expectedBn = FixedMath.Q16_16AcosToBn(expectedQ16, bits, signed: false);
-
-                    int diffTicks = System.Math.Abs(acosBn - expectedBn);
-                    double diffRad = diffTicks * ticksToRad;
-                    double diffDeg = diffRad * (180.0 / System.Math.PI);
-
-                    if (diffDeg > bestDeg) { bestDeg = diffDeg; bestRad = diffRad; bestTicks = diffTicks; atDeg = acosRadRef * 180.0 / System.Math.PI; }
-                }
-
-                // 2) Uniform stride sur le reste
-                long idx = 0;
-                int remaining = System.Math.Max(0, samples - seen.Count);
-                for (int i = 0; i < remaining; i++)
-                {
-                    int raw = (int)(minRaw + idx);
-                    idx += stride; if (idx >= domain) idx -= domain;
-                    if (!seen.Add(raw)) continue;
-
-                    var valObj = Activator.CreateInstance(valType, raw);
-                    int acosBn = (int)miAcos.Invoke(null, new[] { valObj });
-
-                    int valQ16 = (int)((((long)raw * 2 - maxRaw) * 65536L) / maxRaw);
-                    double x = System.Math.Clamp(valQ16 / 65536.0, -1.0, 1.0);
-                    double acosRadRef = System.Math.Acos(x);
-                    int expectedQ16 = (int)System.Math.Round(acosRadRef * 65536.0);
-                    int expectedBn = FixedMath.Q16_16AcosToBn(expectedQ16, bits, signed: false);
-
-                    int diffTicks = System.Math.Abs(acosBn - expectedBn);
-                    double diffRad = diffTicks * ticksToRad;
-                    double diffDeg = diffRad * (180.0 / System.Math.PI);
-
-                    if (diffDeg > bestDeg) { bestDeg = diffDeg; bestRad = diffRad; bestTicks = diffTicks; atDeg = acosRadRef * 180.0 / System.Math.PI; }
-                }
-
-                report += $"\nB{bits}\t{bestDeg:0.00000}\t{bestRad:0.00000}\t{bestTicks}\t{atDeg:0.###}";
-            }
-
-            Console.WriteLine(report);
-            Assert.Pass(report);
-        }
-        #endregion
+                #endregion
 
         #region --- ACOS LUT Retro (IntN)
         [Test]
