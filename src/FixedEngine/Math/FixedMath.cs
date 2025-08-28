@@ -580,29 +580,37 @@ public static class FixedMath
         uint maxRawU = (1u << bits) - 1u;
         long maxRaw = (long)maxRawU;
 
-        // Map UIntN -> Q16
-        // - Petits B : TRUNC partout
-        // - Grands B : NEAR par défaut, TRUNC au-delà du seuil ~±88.2°
-        const int THRESH_882_Q16 = 65515;      // ≈ sin^{-1}(88.2°) en Q16 (1.0 = 65536)
-        const int SMALL_BITS_CUTOFF = 12;      // ajustable si besoin
-
+        // Map UIntN -> Q16 (base)
         long n = ((long)v.Raw * 2 - maxRaw) * 65536L;   // peut être négatif
-        int valQ16;
+        long h = maxRaw >> 1;
+        int valQ16_round = (int)((n >= 0 ? n + h : n - h) / maxRaw); // nearest (par défaut)
 
-        if (bits <= SMALL_BITS_CUTOFF)
-        {
-            // TRONCATION (évite les basculements "nearest" trop agressifs aux petits B)
-            valQ16 = (int)(n / maxRaw);
-        }
-        else
-        {
-            // NEAREST par défaut
-            long h = maxRaw >> 1; // /2
-            int valQ16_round = (int)((n >= 0 ? n + h : n - h) / maxRaw);
-            int ax = valQ16_round >= 0 ? valQ16_round : -valQ16_round;
+        const int THRESH_882_Q16 = 65515;   // ~ 88.2°
+        int ax = valQ16_round >= 0 ? valQ16_round : -valQ16_round;
 
-            // TRUNC près des bords pour éviter le "snap" à 90°
-            valQ16 = (ax >= THRESH_882_Q16) ? (int)(n / maxRaw) : valQ16_round;
+        // Mode prod: nearest, puis trunc au-delà du seuil (évite le "snap" à 90°)
+        int valQ16 = (ax >= THRESH_882_Q16) ? (int)(n / maxRaw) : valQ16_round;
+
+        // --- SMALL-BITS CUSHION (perceptuel) : bits ≤ 16 ---
+        // On éloigne légèrement |x| du bord en ajoutant ~un demi pas "raw" en Q16.
+        // Effet : on réduit les sauts en ticks entre raw et raw+1 pour B6..B16.
+        if (bits <= 16)
+        {
+            // distance au bord en Q16 : eps = 1.0 - |x|
+            int a = valQ16 >= 0 ? valQ16 : -valQ16;     // |x| en Q16
+            int eps = 65536 - a;                        // 0..65536
+
+            // demi pas "raw" en Q16 : Δx_Q16 / 2 = (131072/maxRaw)/2 = 65536/maxRaw
+            int halfStepQ16 = (int)(65536L / maxRaw);   // entier, ~1e3 pour B6
+
+            // boost : on augmente légèrement eps (pousse |x| vers le centre)
+            int boosted = eps + halfStepQ16;
+            if (boosted > 65536) boosted = 65536;
+
+            int a2 = 65536 - boosted;                   // nouveau |x| (un poil plus petit)
+            if (a2 < 0) a2 = 0;
+
+            valQ16 = (valQ16 >= 0) ? a2 : -a2;
         }
 
         // asin = π/2 − acos (core LUT Q16)
