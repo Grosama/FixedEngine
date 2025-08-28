@@ -365,35 +365,86 @@ public static class FixedMath
         if (valQ16 <= -65536) return -TrigConsts.PI_2_Q[16];
         if (valQ16 >= 65536) return TrigConsts.PI_2_Q[16];
 
-        // 2) Index + fraction (mapping [-1..+1] → [0..4095])
-        long idxFracQ16 = ((long)(valQ16 + 65536) * LUT_MASK) << 16; // Q16.16
-        idxFracQ16 /= 131072;                                        // / 2^17
+        // 2) Index + fraction (mapping [-1..+1] → [0..4095]) avec ARRONDI (pas troncature)
+        long num = ((long)(valQ16 + 65536) * LUT_MASK) << 16; // Q16.16
+        long den = 131072;                                    // 2^17
+        long idxFracQ16 = (num + (den >> 1)) / den;           // arrondi au plus proche
 
         int idx = (int)(idxFracQ16 >> 16);     // 0..4094
         int tQ16 = (int)(idxFracQ16 & 0xFFFF);  // 0..65535
 
-        // 3) Mode rétro: B2..B6 → nearest neighbor (écrase les horreurs B7..B14 vues au test)
+        // 3) Mode rétro : B2..B6 → nearest neighbor
         if (bits <= 6)
         {
-            if (tQ16 >= 32768 && idx < LUT_MASK) idx++;   // nearest, pas floor
+            if (tQ16 >= 32768 && idx < LUT_MASK) idx++; // nearest (pas floor)
             return lut[idx];
         }
 
-        // 4) Mode interpolé: B7+ → Catmull, avec routage "tail" pour la fin de courbe
-        int ax = valQ16 < 0 ? -valQ16 : valQ16;          // |x|
-        int x0Tail = AsinLUT_Tail2048.X0_Q;              // sin(75°) en Q16.16
+        // 4) Routage "tail" (forte courbure proche de 75..90°)
+        int ax = (valQ16 < 0) ? -valQ16 : valQ16;  // |x| en Q16
+        int x0Tail = AsinLUT_Tail2048.X0_Q;            // seuil sin(75°) en Q16.16
         if (ax >= x0Tail)
         {
-            int y = AsinTailEval_Q16(ax);                // asin(|x|) via LUT tail
-            return (valQ16 < 0) ? -y : y;                // impaire
+            int yTail = AsinTailEval_Q16(ax);          // asin(|x|) via LUT tail (Q16)
+            return (valQ16 < 0) ? -yTail : yTail;      // impaire
         }
 
-        // Catmull sur la LUT 4096
+        // 5) Interpolation Catmull-Rom sur la LUT 4096 + clamp monotone local
         int p0 = lut[(idx == 0) ? 0 : idx - 1];
         int p1 = lut[idx];
-        int p2 = lut[Math.Min(LUT_MASK, idx + 1)];
-        int p3 = lut[Math.Min(LUT_MASK, idx + 2)];
-        return FixedMath.CatmullRom(p0, p1, p2, p3, tQ16);
+        int p2 = lut[(idx < LUT_MASK) ? idx + 1 : LUT_MASK];
+        int p3 = lut[(idx < LUT_MASK - 1) ? idx + 2 : LUT_MASK];
+
+        int yMid = FixedMath.CatmullRom(p0, p1, p2, p3, tQ16);
+
+        // 🔒 clamp anti-overshoot : y ∈ [min(p1,p2) .. max(p1,p2)]
+        int lo = (p1 < p2) ? p1 : p2;
+        int hi = (p1 > p2) ? p1 : p2;
+        if (yMid < lo) yMid = lo;
+        if (yMid > hi) yMid = hi;
+
+        // 6) Correction centrale : asin(x) = atan(x / sqrt(1 - x^2))
+        // Dans AsinLutCore(int valQ16, int bits), bloc 6) Correction centrale
+        {
+            const int ONE = 65536;
+
+            // ✅ Fix: eviter l'overflow Q32 → uint quand x == 0
+            if (ax == 0)
+            {
+                return 0; // asin(0) = 0 exactement
+            }
+
+            // Ancien code:
+            // long x2 = (long)ax * (long)ax;            // Q32 : x^2
+            // long rest = (long)ONE * (long)ONE - x2;   // Q32 : 1 - x^2
+            // if (rest > 0) { uint denomQ16 = IntegerSqrt((uint)rest, 32); ... }
+
+            // Optionnel: calcul sûr en 64 bits non signé (robuste pour tout ax)
+            ulong one2 = (ulong)ONE * (ulong)ONE;        // 2^32
+            ulong x2 = (ulong)ax * (ulong)ax;         // <= 2^32
+            ulong rest64 = one2 - x2;                    // ∈ [0..2^32]
+            if (rest64 > 0)
+            {
+                uint denomQ16 = (rest64 == one2) ? (uint)ONE   // sqrt(1.0) = 1.0 Q16
+                                                 : IntegerSqrt((uint)rest64, 32);
+
+                uint ratioQ16 = (uint)(((ulong)ax << 16) / denomQ16);
+                uint one = 1u << 16;
+                int yAtan = (ratioQ16 <= one)
+                          ? AtanLutCore(ratioQ16, one, 31)
+                          : (TrigConsts.PI_2_Q[16] - AtanLutCore((uint)(((ulong)one * (ulong)one) / ratioQ16), one, 31));
+
+                if (valQ16 < 0) yAtan = -yAtan;
+                return yAtan; // on remplace yMid par la valeur atan
+            }
+            else
+            {
+                // cas limite |x|=1 (déjà géré en amont normalement)
+                return (valQ16 < 0) ? -TrigConsts.PI_2_Q[16] : TrigConsts.PI_2_Q[16];
+            }
+        }
+
+        return yMid; // Q16 (radians)
     }
 
 
@@ -402,33 +453,36 @@ public static class FixedMath
     private static int AsinTailEval_Q16(int xQ16)
     {
         const int QF = 16;
-        int X0 = AsinLUT_Tail2048.X0_Q;  // sin(75°) en Q16.16
-        int X1 = AsinLUT_Tail2048.X1_Q;  // 1.0 en Q16.16
-        int N = AsinLUT_Tail2048.N;    // 2048
-        int PAD = AsinLUT_Tail2048.PAD;  // 1
-        var V = AsinLUT_Tail2048.LUT;
+        int X0 = AsinLUT_Tail2048.X0_Q;  // sin(75°) Q16.16
+        int X1 = AsinLUT_Tail2048.X1_Q;  // 1.0 Q16.16
+        int N = AsinLUT_Tail2048.N;     // 2048
+        int PAD = AsinLUT_Tail2048.PAD;   // 1
+        var V = AsinLUT_Tail2048.LUT;   // θ en Q16
 
-        // clamp sécurité
         if (xQ16 <= X0) return V[PAD + 0];
         if (xQ16 >= X1) return V[PAD + (N - 1)];
 
-        // u = (x - X0) / (X1 - X0) en Q16
+        // u = (x - X0) / (X1 - X0) en Q16 — ARRONDI
+        int range = X1 - X0;
         long num = ((long)xQ16 - X0) << QF;
-        int uQ16 = (int)(num / (X1 - X0));          // 0..65535
+        int uQ16 = (int)((num + (range >> 1)) / range);
 
         // pos = u * (N-1)
         long posQ16 = (long)uQ16 * (N - 1);
-        int idx = (int)(posQ16 >> QF);              // 0..N-2
-        int tQ16 = (int)(posQ16 & 0xFFFF);          // 0..65535
+        int idx = (int)(posQ16 >> QF);      // 0..N-2
+        int tQ16 = (int)(posQ16 & 0xFFFF);   // 0..65535
 
-        // fenêtre Catmull avec padding "physique" dans la table (2050 valeurs)
         int baseIdx = PAD + idx;
         int p0 = V[baseIdx - 1];
         int p1 = V[baseIdx + 0];
         int p2 = V[baseIdx + 1];
         int p3 = V[baseIdx + 2];
-
         return CatmullRom(p0, p1, p2, p3, tQ16);
+        /*int y = CatmullRom(p0, p1, p2, p3, tQ16);
+        int lo = p1 < p2 ? p1 : p2, hi = p1 > p2 ? p1 : p2;
+        if (y < lo) y = lo;
+        if (y > hi) y = hi;
+        return y;*/
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -523,18 +577,43 @@ public static class FixedMath
         if (bits < 2 || bits > 31)
             throw new NotSupportedException($"Asin<UIntN> : B2..B31 requis (bits={bits}).");
 
-        uint maxRaw = (1u << bits) - 1;
+        uint maxRawU = (1u << bits) - 1u;
+        long maxRaw = (long)maxRawU;
 
-        // map [0..max] -> [-65536..+65536] (rétro-faithful en entiers)
-        int valQ16 = (int)((((long)v.Raw * 2 - maxRaw) * 65536L) / maxRaw);
+        // Map UIntN -> Q16
+        // - Petits B : TRUNC partout
+        // - Grands B : NEAR par défaut, TRUNC au-delà du seuil ~±88.2°
+        const int THRESH_882_Q16 = 65515;      // ≈ sin^{-1}(88.2°) en Q16 (1.0 = 65536)
+        const int SMALL_BITS_CUTOFF = 12;      // ajustable si besoin
 
+        long n = ((long)v.Raw * 2 - maxRaw) * 65536L;   // peut être négatif
+        int valQ16;
+
+        if (bits <= SMALL_BITS_CUTOFF)
+        {
+            // TRONCATION (évite les basculements "nearest" trop agressifs aux petits B)
+            valQ16 = (int)(n / maxRaw);
+        }
+        else
+        {
+            // NEAREST par défaut
+            long h = maxRaw >> 1; // /2
+            int valQ16_round = (int)((n >= 0 ? n + h : n - h) / maxRaw);
+            int ax = valQ16_round >= 0 ? valQ16_round : -valQ16_round;
+
+            // TRUNC près des bords pour éviter le "snap" à 90°
+            valQ16 = (ax >= THRESH_882_Q16) ? (int)(n / maxRaw) : valQ16_round;
+        }
+
+        // asin = π/2 − acos (core LUT Q16)
         int acosQ16 = AcosLutCore(valQ16, bits);
         int asinQ16 = TrigConsts.PI_2_Q[16] - acosQ16;
 
-        // asin sort un angle SIGNÉ ([-pi/2..+pi/2]) -> Bn signé
+        // angle signé [-π/2..+π/2] -> Bn signé
         return Q16_16AngleToBn(asinQ16, bits, signed: true);
     }
     #endregion
+
 
     #region --- ASIN (IntN) ---
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

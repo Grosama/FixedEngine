@@ -2,6 +2,7 @@
 using FixedEngine.Math;
 using FixedEngine.Math.Consts;
 using NUnit.Framework;
+using System.Reflection;
 
 namespace FixedEngine.Tests.Math
 {
@@ -9,7 +10,7 @@ namespace FixedEngine.Tests.Math
 
 
     [TestFixture]
-    public  class FixedMathTest
+    public class FixedMathTest
     {
 
         // ==========================
@@ -601,7 +602,8 @@ namespace FixedEngine.Tests.Math
 
             var miTanRawOpen = typeof(FixedMath).GetMethods()
                 .Where(m => m.Name == "TanRaw" && m.IsGenericMethodDefinition)
-                .First(m => {
+                .First(m =>
+                {
                     var ps = m.GetParameters();
                     return ps.Length == 1
                            && ps[0].ParameterType.IsGenericType
@@ -985,6 +987,45 @@ namespace FixedEngine.Tests.Math
 
             Console.WriteLine(report);
             Assert.Pass(report);
+        }
+
+        [Test]
+        public void Asin_IsMonotone_B16()
+        {
+            var seen = new HashSet<int>();
+            int prev = int.MinValue;
+
+            // B16 => domaine 0..65535
+            for (uint raw = 0; raw <= 65535u; raw++)
+            {
+                int y = FixedMath.Asin(new UIntN<B16>(raw));
+
+                // monotonicité non stricte (plateaux permis si quantums identiques)
+                Assert.That(y, Is.GreaterThanOrEqualTo(prev), $"non-monotone at raw={raw}");
+                prev = y;
+                seen.Add(y);
+            }
+
+            // bornes théoriques pour ticks signés B16
+            int maxTicks = (1 << (16 - 1)) - 1; // 32767
+
+            // mesures réelles observées
+            int seenMin = seen.Min();
+            int seenMax = seen.Max();
+
+            Assert.Multiple(() =>
+            {
+                // centre présent
+                Assert.That(seen.Contains(0), Is.True, "0° manquant");
+
+                // bornes atteintes à ±1 tick près (arrondi négatif peut remonter d'un cran)
+                Assert.That(seenMax, Is.InRange(maxTicks - 0, maxTicks), "+90° trop bas");
+                Assert.That(seenMin, Is.InRange(-maxTicks, -maxTicks + 1), "-90° trop haut");
+
+                // sécurité: rien ne dépasse l'intervalle théorique
+                Assert.That(seenMin, Is.GreaterThanOrEqualTo(-maxTicks));
+                Assert.That(seenMax, Is.LessThanOrEqualTo(maxTicks));
+            });
         }
         #endregion
 
@@ -1474,125 +1515,358 @@ namespace FixedEngine.Tests.Math
                 }
             }
         }
+
+        [Test]
+        public void Asin_UIntN_B2toB31_AtAngles_ErrorTable_neg()
+        {
+            var angles = new[] { -30.0, -45.0, -60.0, -75.0, -89.0, -90.0 };
+
+            foreach (var targetDeg in angles)
+            {
+                TestContext.Out.WriteLine($"\n=== θ = {targetDeg}° ===");
+                TestContext.Out.WriteLine("Bn\tRaw\t\t x\t\tasinBn\tdeg\t\tΔdeg");
+
+                for (int bits = 2; bits <= 31; bits++)
+                {
+                    uint maxU = (uint)((1 << bits) - 1);
+                    int maxSigned = (1 << (bits - 1)) - 1;
+
+                    uint raw = BuildRawForSinDeg(bits, targetDeg);
+
+                    // x réellement injecté par le mapping utilisé par Asin(UIntN):
+                    // x = (2*raw - max) / max
+                    double x = ((2.0 * raw) - maxU) / maxU;
+
+                    int asinBn = Asin_UIntN_ByBits(bits, raw);
+
+                    // Bn signé -> degrés (fenêtre [-90..+90])
+                    double deg = asinBn * (90.0 / maxSigned);
+
+                    double diff = deg - targetDeg;
+
+                    TestContext.Out.WriteLine(
+                        $"B{bits}\t{raw}\t{x,8:F6}\t{asinBn}\t{deg,8:F3}\t{diff,8:F3}");
+                }
+            }
+        }
+        #endregion
+
+
+        #region test
+        // Helper générique: renvoie (maxGapTicks, midDegApprox) sur [start..end]
+        private static (int maxGapTicks, double midDegApprox)
+        MeasureGapGenericTicks<TBits>(int start, int end, int bits)
+            where TBits : struct
+        {
+            int maxSigned = (1 << (bits - 1)) - 1;
+            double tickToDeg = 90.0 / System.Math.Max(1, maxSigned);
+
+            // --------------- Pass 1 : coarse (stride) ---------------
+            // Objectif: repérer rapidement où le gap est grand sans tout balayer
+            int stride = 32; // ajuste 16/32 selon budget
+            int bestGapTicks = 0;
+            int bestRaw = start; // raw après lequel le gap est max
+            int prevTick = FixedMath.Asin(new UIntN<TBits>(start));
+
+            for (int raw = start + 1; raw <= end;)
+            {
+                int curTick;
+
+                // On évalue quand même le voisin direct (raw-1 -> raw), car le gap max peut être local
+                curTick = FixedMath.Asin(new UIntN<TBits>(raw));
+                int gapTicks = System.Math.Abs(curTick - prevTick);
+                if (gapTicks > bestGapTicks) { bestGapTicks = gapTicks; bestRaw = raw; }
+                prevTick = curTick;
+
+                // Sauter de 'stride' pas (sauf si on est proche de la fin)
+                int next = raw + stride;
+                if (next > end) break;
+
+                int tickNext = FixedMath.Asin(new UIntN<TBits>(next));
+                gapTicks = System.Math.Abs(tickNext - prevTick);
+                if (gapTicks > bestGapTicks) { bestGapTicks = gapTicks; bestRaw = next; }
+                prevTick = tickNext;
+
+                raw = next + 1;
+            }
+
+            // --------------- Pass 2 : fine (contigu autour du best) ---------------
+            // Balayage contigu court (±256 raws) autour de la zone gagnante
+            int radius = 256;
+            int from = System.Math.Max(start, bestRaw - radius);
+            int to = System.Math.Min(end, bestRaw + radius);
+
+            int maxGapTicks = 0;
+            double midDegApprox = 0.0;
+
+            int prev = FixedMath.Asin(new UIntN<TBits>(from));
+            for (int raw = from + 1; raw <= to; raw++)
+            {
+                int cur = FixedMath.Asin(new UIntN<TBits>(raw));
+                int gap = System.Math.Abs(cur - prev);
+                if (gap > maxGapTicks)
+                {
+                    maxGapTicks = gap;
+                    // approximation : milieu en degrés entre les deux sorties
+                    midDegApprox = ((cur + prev) * 0.5) * tickToDeg;
+                }
+                prev = cur;
+            }
+
+            // garde le meilleur des deux passes
+            if (bestGapTicks > maxGapTicks)
+            {
+                maxGapTicks = bestGapTicks;
+                // mid≈ : si on n’a pas la paire précise ici, on approxime par la sortie à bestRaw
+                double midTick = FixedMath.Asin(new UIntN<TBits>(bestRaw));
+                midDegApprox = midTick * tickToDeg;
+            }
+
+            return (maxGapTicks, midDegApprox);
+        }
+
+        [Test]
+        public void Asin_UIntN_B2toB31_MaxUserPerceivedAngleError_Gap_Fast()
+        {
+            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            string report = "\nBn\tMaxErrDeg\tMaxErrRad\tMaxGapDeg\tMaxGapTicks\tAtDeg≈";
+
+            // MethodInfo du helper générique
+            var generic = typeof(FixedMathTest).GetMethod(
+                nameof(MeasureGapGenericTicks),
+                BindingFlags.NonPublic | BindingFlags.Static);
+            if (generic == null) Assert.Fail("MeasureGapGenericTicks<TBits> introuvable.");
+
+            for (int bits = 2; bits <= 28; bits++)
+            {
+                var tagType = asm.GetType($"FixedEngine.Math.B{bits}", throwOnError: true);
+                int maxRaw = (1 << bits) - 1;
+                int domain = maxRaw + 1;
+                int window = System.Math.Min(domain, 4096); // 4096 suffit largement
+
+                // Fermer générique UNE fois
+                var m = generic.MakeGenericMethod(tagType);
+
+                // On ne mesure qu’aux bords (là où le gap est max)
+                // Bord négatif : [0 .. window-1]
+                var left = ((int maxGapTicks, double midDegApprox))
+                           m.Invoke(null, new object[] { 0, window - 1, bits })!;
+                // Bord positif : [maxRaw-(window-1) .. maxRaw]
+                var right = ((int maxGapTicks, double midDegApprox))
+                            m.Invoke(null, new object[] { maxRaw - (window - 1), maxRaw, bits })!;
+
+                var best = (left.maxGapTicks >= right.maxGapTicks) ? left : right;
+
+                int maxSigned = (1 << (bits - 1)) - 1;
+                double tickToDeg = 90.0 / System.Math.Max(1, maxSigned);
+                double tickToRad = (System.Math.PI / 2.0) / System.Math.Max(1, maxSigned);
+
+                double maxGapDeg = best.maxGapTicks * tickToDeg;
+                double maxErrDeg = 0.5 * maxGapDeg;             // gap/2 = erreur perçue max
+                double maxErrRad = 0.5 * best.maxGapTicks * tickToRad;
+
+                report += $"\nB{bits}\t{maxErrDeg:0.00000}\t{maxErrRad:0.00000}\t{maxGapDeg:0.00000}\t{best.maxGapTicks}\t{best.midDegApprox:0.###}";
+            }
+
+            TestContext.Out.WriteLine(report);
+            Assert.Pass(report);
+        }
+
+        #endregion
+
+        #region test 2
+        // 🔹 Helper générique placé AU NIVEAU DE LA CLASSE
+        private static (int maxGapTicks, double midDeg)
+        MeasureGapPositive<TBits>(int start, int end, int bits)
+            where TBits : struct
+        {
+            int maxSigned = (1 << (bits - 1)) - 1;
+            double tickToDeg = 90.0 / System.Math.Max(1, maxSigned);
+
+            int prevTick = FixedMath.Asin(new UIntN<TBits>(start));
+            int bestGapTicks = 0;
+            double bestMidDeg = prevTick * tickToDeg;
+
+            for (int raw = start + 1; raw <= end; raw++)
+            {
+                int curTick = FixedMath.Asin(new UIntN<TBits>(raw));
+                int gapTicks = System.Math.Abs(curTick - prevTick);
+                if (gapTicks > bestGapTicks)
+                {
+                    bestGapTicks = gapTicks;
+                    bestMidDeg = ((curTick + prevTick) * 0.5) * tickToDeg;
+                }
+                prevTick = curTick;
+            }
+            return (bestGapTicks, bestMidDeg);
+        }
+
+        [Test]
+        public void Asin_UIntN_B2toB31_MaxUserPerceivedAngleError_PositiveOnly()
+        {
+            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            string report = "\nBn\tMaxErrDeg\tMaxErrRad\tMaxGapDeg\tMaxGapTicks\tAtDeg≈";
+
+            // Récupère la MethodInfo du helper défini ci-dessus
+            var generic = typeof(FixedMathTest).GetMethod(
+                nameof(MeasureGapPositive),
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(generic, Is.Not.Null, "Helper MeasureGapPositive introuvable");
+
+            const int EDGE_WINDOW = 16384;
+
+            for (int bits = 2; bits <= 28; bits++)
+            {
+                var tagType = asm.GetType($"FixedEngine.Math.B{bits}", throwOnError: true);
+                int maxRaw = (1 << bits) - 1;
+                int domain = maxRaw + 1;
+
+                // Positive side only : [domain/2 .. maxRaw]
+                int start = domain / 2;
+                int end = maxRaw;
+                int window = System.Math.Min(end - start + 1, EDGE_WINDOW);
+
+                var m = generic!.MakeGenericMethod(tagType);
+
+                // Fenêtre contiguë aux bords positifs
+                var best = ((int maxGapTicks, double midDeg))
+                           m.Invoke(null, new object[] { end - (window - 1), end, bits })!;
+
+                int maxSigned = (1 << (bits - 1)) - 1;
+                double tickToDeg = 90.0 / System.Math.Max(1, maxSigned);
+                double tickToRad = (System.Math.PI / 2.0) / System.Math.Max(1, maxSigned);
+
+                double maxGapDeg = best.maxGapTicks * tickToDeg;
+                double maxErrDeg = 0.5 * maxGapDeg;
+                double maxErrRad = 0.5 * best.maxGapTicks * tickToRad;
+
+                report += $"\nB{bits}\t{maxErrDeg:0.00000}\t{maxErrRad:0.00000}" +
+                          $"\t{maxGapDeg:0.00000}\t{best.maxGapTicks}\t{best.midDeg:0.###}";
+            }
+
+            TestContext.Out.WriteLine(report);
+            Assert.Pass(report);
+        }
+    
         #endregion
 
         // ----- ACOS -----
         #region --- ACOS LUT Retro (UIntN)
         [Test]
-                public void Acos_UIntN_B2toB31_MaxAngleError()
+        public void Acos_UIntN_B2toB31_MaxAngleError()
+        {
+            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            string report = "\nBn\tMaxAngleErrDeg\tMaxAngleErrRad\tMaxAngleErrTicks\tAtDeg";
+
+            static long Gcd(long a, long b) { while (b != 0) { long t = a % b; a = b; b = t; } return System.Math.Abs(a); }
+
+            static int ValQ16ToRaw_UIntN_Trunc(int valQ16, int bits)
+            {
+                long maxRaw = (1L << bits) - 1L;
+                long rawApprox = (valQ16 * maxRaw) / 65536L;   // trunc
+                long raw = (rawApprox + maxRaw) / 2L;
+                if (raw < 0) raw = 0;
+                if (raw > maxRaw) raw = maxRaw;
+                return (int)raw;
+            }
+
+            for (int bits = 2; bits <= 31; bits++)
+            {
+                var tagType = asm.GetType($"FixedEngine.Math.B{bits}");
+                if (tagType == null) { Console.WriteLine($"Type B{bits} absent : SKIP"); continue; }
+
+                var valType = typeof(UIntN<>).MakeGenericType(tagType);
+                var miAcos = typeof(FixedMath).GetMethods()
+                    .First(m => m.Name == "Acos"
+                             && m.IsGenericMethod
+                             && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(UIntN<>))
+                    .MakeGenericMethod(tagType);
+
+                int maxRaw = (1 << bits) - 1;
+                int minRaw = 0;
+                long domain = (long)maxRaw - (long)minRaw + 1;      // = 2^bits
+                int samples = (domain <= 2_000_000L) ? (int)domain : 1_000_000;
+
+                // Densité angulaire unsigned sur [0..π]
+                double ticksToRad = System.Math.PI / (1u << (bits - 1));
+
+                long stride = 1_103_515_245L % domain; if (stride <= 0) stride += domain;
+                if ((stride & 1) == 0) stride++;
+                while (Gcd(stride, domain) != 1) { stride += 2; if (stride >= domain) stride -= domain; }
+
+                int xTailQ16 = (int)System.Math.Round(System.Math.Sin(System.Math.PI * 75.0 / 180.0) * 65536.0);
+                int[] offsetsQ16 = { -256, -128, -64, -32, -16, -8, -4, -1, 0, 1, 4, 8, 16, 32, 64, 128, 256 };
+
+                var seen = new System.Collections.Generic.HashSet<int>();
+                seen.Add(minRaw);
+                seen.Add(maxRaw);
+                seen.Add(maxRaw >> 1); // centre (~0 rad)
+
+                foreach (var off in offsetsQ16)
                 {
-                    var asm = typeof(FixedEngine.Math.B2).Assembly;
-                    string report = "\nBn\tMaxAngleErrDeg\tMaxAngleErrRad\tMaxAngleErrTicks\tAtDeg";
+                    int rawPos = ValQ16ToRaw_UIntN_Trunc(xTailQ16 + off, bits);
+                    seen.Add(rawPos);
+                    if (rawPos + 1 <= maxRaw) seen.Add(rawPos + 1);
 
-                    static long Gcd(long a, long b) { while (b != 0) { long t = a % b; a = b; b = t; } return System.Math.Abs(a); }
-
-                    static int ValQ16ToRaw_UIntN_Trunc(int valQ16, int bits)
-                    {
-                        long maxRaw = (1L << bits) - 1L;
-                        long rawApprox = (valQ16 * maxRaw) / 65536L;   // trunc
-                        long raw = (rawApprox + maxRaw) / 2L;
-                        if (raw < 0) raw = 0;
-                        if (raw > maxRaw) raw = maxRaw;
-                        return (int)raw;
-                    }
-
-                    for (int bits = 2; bits <= 31; bits++)
-                    {
-                        var tagType = asm.GetType($"FixedEngine.Math.B{bits}");
-                        if (tagType == null) { Console.WriteLine($"Type B{bits} absent : SKIP"); continue; }
-
-                        var valType = typeof(UIntN<>).MakeGenericType(tagType);
-                        var miAcos = typeof(FixedMath).GetMethods()
-                            .First(m => m.Name == "Acos"
-                                     && m.IsGenericMethod
-                                     && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(UIntN<>))
-                            .MakeGenericMethod(tagType);
-
-                        int maxRaw = (1 << bits) - 1;
-                        int minRaw = 0;
-                        long domain = (long)maxRaw - (long)minRaw + 1;      // = 2^bits
-                        int samples = (domain <= 2_000_000L) ? (int)domain : 1_000_000;
-
-                        // Densité angulaire unsigned sur [0..π]
-                        double ticksToRad = System.Math.PI / (1u << (bits - 1));
-
-                        long stride = 1_103_515_245L % domain; if (stride <= 0) stride += domain;
-                        if ((stride & 1) == 0) stride++;
-                        while (Gcd(stride, domain) != 1) { stride += 2; if (stride >= domain) stride -= domain; }
-
-                        int xTailQ16 = (int)System.Math.Round(System.Math.Sin(System.Math.PI * 75.0 / 180.0) * 65536.0);
-                        int[] offsetsQ16 = { -256, -128, -64, -32, -16, -8, -4, -1, 0, 1, 4, 8, 16, 32, 64, 128, 256 };
-
-                        var seen = new System.Collections.Generic.HashSet<int>();
-                        seen.Add(minRaw);
-                        seen.Add(maxRaw);
-                        seen.Add(maxRaw >> 1); // centre (~0 rad)
-
-                        foreach (var off in offsetsQ16)
-                        {
-                            int rawPos = ValQ16ToRaw_UIntN_Trunc(xTailQ16 + off, bits);
-                            seen.Add(rawPos);
-                            if (rawPos + 1 <= maxRaw) seen.Add(rawPos + 1);
-
-                            int rawNeg = ValQ16ToRaw_UIntN_Trunc(-(xTailQ16 + off), bits);
-                            seen.Add(rawNeg);
-                            if (rawNeg + 1 <= maxRaw) seen.Add(rawNeg + 1);
-                        }
-
-                        int bestTicks = 0; double bestDeg = 0, bestRad = 0, atDeg = 0;
-
-                        // 1) Hotspots
-                        foreach (int raw in seen)
-                        {
-                            var valObj = Activator.CreateInstance(valType, raw);
-                            int acosBn = (int)miAcos.Invoke(null, new[] { valObj });
-
-                            // Référence double: map UIntN -> Q16 (trunc), acos, puis map unsigned
-                            int valQ16 = (int)((((long)raw * 2 - maxRaw) * 65536L) / maxRaw);
-                            double x = System.Math.Clamp(valQ16 / 65536.0, -1.0, 1.0);
-                            double acosRadRef = System.Math.Acos(x);
-                            int expectedQ16 = (int)System.Math.Round(acosRadRef * 65536.0);
-                            int expectedBn = FixedMath.Q16_16AcosToBn(expectedQ16, bits, signed: false);
-
-                            int diffTicks = System.Math.Abs(acosBn - expectedBn);
-                            double diffRad = diffTicks * ticksToRad;
-                            double diffDeg = diffRad * (180.0 / System.Math.PI);
-
-                            if (diffDeg > bestDeg) { bestDeg = diffDeg; bestRad = diffRad; bestTicks = diffTicks; atDeg = acosRadRef * 180.0 / System.Math.PI; }
-                        }
-
-                        // 2) Uniform stride sur le reste
-                        long idx = 0;
-                        int remaining = System.Math.Max(0, samples - seen.Count);
-                        for (int i = 0; i < remaining; i++)
-                        {
-                            int raw = (int)(minRaw + idx);
-                            idx += stride; if (idx >= domain) idx -= domain;
-                            if (!seen.Add(raw)) continue;
-
-                            var valObj = Activator.CreateInstance(valType, raw);
-                            int acosBn = (int)miAcos.Invoke(null, new[] { valObj });
-
-                            int valQ16 = (int)((((long)raw * 2 - maxRaw) * 65536L) / maxRaw);
-                            double x = System.Math.Clamp(valQ16 / 65536.0, -1.0, 1.0);
-                            double acosRadRef = System.Math.Acos(x);
-                            int expectedQ16 = (int)System.Math.Round(acosRadRef * 65536.0);
-                            int expectedBn = FixedMath.Q16_16AcosToBn(expectedQ16, bits, signed: false);
-
-                            int diffTicks = System.Math.Abs(acosBn - expectedBn);
-                            double diffRad = diffTicks * ticksToRad;
-                            double diffDeg = diffRad * (180.0 / System.Math.PI);
-
-                            if (diffDeg > bestDeg) { bestDeg = diffDeg; bestRad = diffRad; bestTicks = diffTicks; atDeg = acosRadRef * 180.0 / System.Math.PI; }
-                        }
-
-                        report += $"\nB{bits}\t{bestDeg:0.00000}\t{bestRad:0.00000}\t{bestTicks}\t{atDeg:0.###}";
-                    }
-
-                    Console.WriteLine(report);
-                    Assert.Pass(report);
+                    int rawNeg = ValQ16ToRaw_UIntN_Trunc(-(xTailQ16 + off), bits);
+                    seen.Add(rawNeg);
+                    if (rawNeg + 1 <= maxRaw) seen.Add(rawNeg + 1);
                 }
-                #endregion
+
+                int bestTicks = 0; double bestDeg = 0, bestRad = 0, atDeg = 0;
+
+                // 1) Hotspots
+                foreach (int raw in seen)
+                {
+                    var valObj = Activator.CreateInstance(valType, raw);
+                    int acosBn = (int)miAcos.Invoke(null, new[] { valObj });
+
+                    // Référence double: map UIntN -> Q16 (trunc), acos, puis map unsigned
+                    int valQ16 = (int)((((long)raw * 2 - maxRaw) * 65536L) / maxRaw);
+                    double x = System.Math.Clamp(valQ16 / 65536.0, -1.0, 1.0);
+                    double acosRadRef = System.Math.Acos(x);
+                    int expectedQ16 = (int)System.Math.Round(acosRadRef * 65536.0);
+                    int expectedBn = FixedMath.Q16_16AcosToBn(expectedQ16, bits, signed: false);
+
+                    int diffTicks = System.Math.Abs(acosBn - expectedBn);
+                    double diffRad = diffTicks * ticksToRad;
+                    double diffDeg = diffRad * (180.0 / System.Math.PI);
+
+                    if (diffDeg > bestDeg) { bestDeg = diffDeg; bestRad = diffRad; bestTicks = diffTicks; atDeg = acosRadRef * 180.0 / System.Math.PI; }
+                }
+
+                // 2) Uniform stride sur le reste
+                long idx = 0;
+                int remaining = System.Math.Max(0, samples - seen.Count);
+                for (int i = 0; i < remaining; i++)
+                {
+                    int raw = (int)(minRaw + idx);
+                    idx += stride; if (idx >= domain) idx -= domain;
+                    if (!seen.Add(raw)) continue;
+
+                    var valObj = Activator.CreateInstance(valType, raw);
+                    int acosBn = (int)miAcos.Invoke(null, new[] { valObj });
+
+                    int valQ16 = (int)((((long)raw * 2 - maxRaw) * 65536L) / maxRaw);
+                    double x = System.Math.Clamp(valQ16 / 65536.0, -1.0, 1.0);
+                    double acosRadRef = System.Math.Acos(x);
+                    int expectedQ16 = (int)System.Math.Round(acosRadRef * 65536.0);
+                    int expectedBn = FixedMath.Q16_16AcosToBn(expectedQ16, bits, signed: false);
+
+                    int diffTicks = System.Math.Abs(acosBn - expectedBn);
+                    double diffRad = diffTicks * ticksToRad;
+                    double diffDeg = diffRad * (180.0 / System.Math.PI);
+
+                    if (diffDeg > bestDeg) { bestDeg = diffDeg; bestRad = diffRad; bestTicks = diffTicks; atDeg = acosRadRef * 180.0 / System.Math.PI; }
+                }
+
+                report += $"\nB{bits}\t{bestDeg:0.00000}\t{bestRad:0.00000}\t{bestTicks}\t{atDeg:0.###}";
+            }
+
+            Console.WriteLine(report);
+            Assert.Pass(report);
+        }
+        #endregion
 
         #region --- ACOS LUT Retro (IntN)
         [Test]
@@ -1983,6 +2257,8 @@ namespace FixedEngine.Tests.Math
 
 
 
+
+
         #endregion
 
         // ==========================
@@ -2045,4 +2321,6 @@ namespace FixedEngine.Tests.Math
 
 
     }
+
 }
+
