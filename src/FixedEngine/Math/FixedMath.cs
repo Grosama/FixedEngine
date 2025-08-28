@@ -444,7 +444,7 @@ public static class FixedMath
             }
         }
 
-        return yMid; // Q16 (radians)
+        //return yMid; // Q16 (radians)
     }
 
 
@@ -580,6 +580,11 @@ public static class FixedMath
         uint maxRawU = (1u << bits) - 1u;
         long maxRaw = (long)maxRawU;
 
+        // --- Ancrages durs : ±90° exacts ---
+        int maxTick = (1 << (bits - 1)) - 1;
+        if (v.Raw == 0u) return -maxTick;   // asin(-1) = -π/2
+        if (v.Raw == maxRawU) return +maxTick;   // asin(+1) = +π/2
+
         // Map UIntN -> Q16 (base)
         long n = ((long)v.Raw * 2 - maxRaw) * 65536L;   // peut être négatif
         long h = maxRaw >> 1;
@@ -588,7 +593,7 @@ public static class FixedMath
         const int THRESH_882_Q16 = 65515;   // ~ 88.2°
         int ax = valQ16_round >= 0 ? valQ16_round : -valQ16_round;
 
-        // Mode prod: nearest, puis trunc au-delà du seuil (évite le "snap" à 90°)
+        // Nearest partout, puis trunc au-delà du seuil (évite le "snap" à 90°)
         int valQ16 = (ax >= THRESH_882_Q16) ? (int)(n / maxRaw) : valQ16_round;
 
         // --- SMALL-BITS CUSHION (perceptuel) : bits ≤ 16 ---
@@ -616,8 +621,6 @@ public static class FixedMath
         // asin = π/2 − acos (core LUT Q16)
         int acosQ16 = AcosLutCore(valQ16, bits);
         int asinQ16 = TrigConsts.PI_2_Q[16] - acosQ16;
-
-        // angle signé [-π/2..+π/2] -> Bn signé
         return Q16_16AngleToBn(asinQ16, bits, signed: true);
     }
     #endregion

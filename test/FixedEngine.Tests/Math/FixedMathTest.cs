@@ -1553,124 +1553,120 @@ namespace FixedEngine.Tests.Math
 
 
         #region test
-        // Helper générique: renvoie (maxGapTicks, midDegApprox) sur [start..end]
-        private static (int maxGapTicks, double midDegApprox)
-        MeasureGapGenericTicks<TBits>(int start, int end, int bits)
-            where TBits : struct
-        {
-            int maxSigned = (1 << (bits - 1)) - 1;
-            double tickToDeg = 90.0 / System.Math.Max(1, maxSigned);
-
-            // --------------- Pass 1 : coarse (stride) ---------------
-            // Objectif: repérer rapidement où le gap est grand sans tout balayer
-            int stride = 32; // ajuste 16/32 selon budget
-            int bestGapTicks = 0;
-            int bestRaw = start; // raw après lequel le gap est max
-            int prevTick = FixedMath.Asin(new UIntN<TBits>(start));
-
-            for (int raw = start + 1; raw <= end;)
-            {
-                int curTick;
-
-                // On évalue quand même le voisin direct (raw-1 -> raw), car le gap max peut être local
-                curTick = FixedMath.Asin(new UIntN<TBits>(raw));
-                int gapTicks = System.Math.Abs(curTick - prevTick);
-                if (gapTicks > bestGapTicks) { bestGapTicks = gapTicks; bestRaw = raw; }
-                prevTick = curTick;
-
-                // Sauter de 'stride' pas (sauf si on est proche de la fin)
-                int next = raw + stride;
-                if (next > end) break;
-
-                int tickNext = FixedMath.Asin(new UIntN<TBits>(next));
-                gapTicks = System.Math.Abs(tickNext - prevTick);
-                if (gapTicks > bestGapTicks) { bestGapTicks = gapTicks; bestRaw = next; }
-                prevTick = tickNext;
-
-                raw = next + 1;
-            }
-
-            // --------------- Pass 2 : fine (contigu autour du best) ---------------
-            // Balayage contigu court (±256 raws) autour de la zone gagnante
-            int radius = 256;
-            int from = System.Math.Max(start, bestRaw - radius);
-            int to = System.Math.Min(end, bestRaw + radius);
-
-            int maxGapTicks = 0;
-            double midDegApprox = 0.0;
-
-            int prev = FixedMath.Asin(new UIntN<TBits>(from));
-            for (int raw = from + 1; raw <= to; raw++)
-            {
-                int cur = FixedMath.Asin(new UIntN<TBits>(raw));
-                int gap = System.Math.Abs(cur - prev);
-                if (gap > maxGapTicks)
-                {
-                    maxGapTicks = gap;
-                    // approximation : milieu en degrés entre les deux sorties
-                    midDegApprox = ((cur + prev) * 0.5) * tickToDeg;
-                }
-                prev = cur;
-            }
-
-            // garde le meilleur des deux passes
-            if (bestGapTicks > maxGapTicks)
-            {
-                maxGapTicks = bestGapTicks;
-                // mid≈ : si on n’a pas la paire précise ici, on approxime par la sortie à bestRaw
-                double midTick = FixedMath.Asin(new UIntN<TBits>(bestRaw));
-                midDegApprox = midTick * tickToDeg;
-            }
-
-            return (maxGapTicks, midDegApprox);
-        }
-
         [Test]
-        public void Asin_UIntN_B2toB31_MaxUserPerceivedAngleError_Gap_Fast()
+        public void Asin_UIntN_B2toB28_MaxUserPerceivedAngleError_Gap_Fast()
         {
             var asm = typeof(FixedEngine.Math.B2).Assembly;
             string report = "\nBn\tMaxErrDeg\tMaxErrRad\tMaxGapDeg\tMaxGapTicks\tAtDeg≈";
 
-            // MethodInfo du helper générique
-            var generic = typeof(FixedMathTest).GetMethod(
-                nameof(MeasureGapGenericTicks),
-                BindingFlags.NonPublic | BindingFlags.Static);
-            if (generic == null) Assert.Fail("MeasureGapGenericTicks<TBits> introuvable.");
+            var mPos = typeof(FixedMathTest).GetMethod(nameof(MeasureGapPositive),
+                        BindingFlags.NonPublic | BindingFlags.Static);
+            var mNeg = typeof(FixedMathTest).GetMethod(nameof(MeasureGapPositive),
+                        BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(mPos, Is.Not.Null);
+            Assert.That(mNeg, Is.Not.Null);
+
+            const int EDGE_WINDOW = 16384;
 
             for (int bits = 2; bits <= 28; bits++)
             {
                 var tagType = asm.GetType($"FixedEngine.Math.B{bits}", throwOnError: true);
                 int maxRaw = (1 << bits) - 1;
                 int domain = maxRaw + 1;
-                int window = System.Math.Min(domain, 4096); // 4096 suffit largement
 
-                // Fermer générique UNE fois
-                var m = generic.MakeGenericMethod(tagType);
+                // ---- négatif : même fenêtre que NegativeOnly
+                int startN = 0, endN = domain / 2;
+                int winN = System.Math.Min(endN - startN + 1, EDGE_WINDOW);
+                var neg = ((int maxGapTicks, double midDeg))
+                          mNeg!.MakeGenericMethod(tagType)
+                              .Invoke(null, new object[] { startN, startN + (winN - 1), bits })!;
 
-                // On ne mesure qu’aux bords (là où le gap est max)
-                // Bord négatif : [0 .. window-1]
-                var left = ((int maxGapTicks, double midDegApprox))
-                           m.Invoke(null, new object[] { 0, window - 1, bits })!;
-                // Bord positif : [maxRaw-(window-1) .. maxRaw]
-                var right = ((int maxGapTicks, double midDegApprox))
-                            m.Invoke(null, new object[] { maxRaw - (window - 1), maxRaw, bits })!;
+                // ---- positif : même fenêtre que PositiveOnly
+                int startP = domain / 2, endP = maxRaw;
+                int winP = System.Math.Min(endP - startP + 1, EDGE_WINDOW);
+                var pos = ((int maxGapTicks, double midDeg))
+                          mPos!.MakeGenericMethod(tagType)
+                              .Invoke(null, new object[] { endP - (winP - 1), endP, bits })!;
 
-                var best = (left.maxGapTicks >= right.maxGapTicks) ? left : right;
+                var best = (neg.maxGapTicks >= pos.maxGapTicks) ? neg : pos;
 
                 int maxSigned = (1 << (bits - 1)) - 1;
                 double tickToDeg = 90.0 / System.Math.Max(1, maxSigned);
                 double tickToRad = (System.Math.PI / 2.0) / System.Math.Max(1, maxSigned);
 
                 double maxGapDeg = best.maxGapTicks * tickToDeg;
-                double maxErrDeg = 0.5 * maxGapDeg;             // gap/2 = erreur perçue max
+                double maxErrDeg = 0.5 * maxGapDeg;
                 double maxErrRad = 0.5 * best.maxGapTicks * tickToRad;
 
-                report += $"\nB{bits}\t{maxErrDeg:0.00000}\t{maxErrRad:0.00000}\t{maxGapDeg:0.00000}\t{best.maxGapTicks}\t{best.midDegApprox:0.###}";
+                report += $"\nB{bits}\t{maxErrDeg:0.00000}\t{maxErrRad:0.00000}" +
+                          $"\t{maxGapDeg:0.00000}\t{best.maxGapTicks}\t{best.midDeg:0.###}";
             }
 
             TestContext.Out.WriteLine(report);
             Assert.Pass(report);
         }
+
+        [Test]
+        public void Asin_UIntN_B2toB28_MaxUserPerceivedAngleError_Gap_Fast_NoAnchors()
+        {
+            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            string report = "\nBn\tMaxErrDeg\tMaxErrRad\tMaxGapDeg\tMaxGapTicks\tAtDeg≈";
+
+            var mPos = typeof(FixedMathTest).GetMethod(nameof(MeasureGapPositive),
+                          BindingFlags.NonPublic | BindingFlags.Static);
+            var mNeg = typeof(FixedMathTest).GetMethod(nameof(MeasureGapPositive),
+                          BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(mPos, Is.Not.Null, "MeasureGapPositive introuvable");
+            Assert.That(mNeg, Is.Not.Null, "MeasureGapNegative introuvable");
+
+            const int EDGE_WINDOW = 16384; // même taille que PositiveOnly/NegativeOnly
+
+            for (int bits = 2; bits <= 28; bits++)
+            {
+                var tagType = asm.GetType($"FixedEngine.Math.B{bits}", throwOnError: true);
+                int maxRaw = (1 << bits) - 1;
+                int domain = maxRaw + 1;
+
+                // --- NÉGATIF (sans ancrage) : [1 .. 1+(winN-1)]
+                int startN = 1;
+                int endN = domain / 2; // borne médiane (incluse côté helper)
+                int winN = System.Math.Min(endN - startN + 1, EDGE_WINDOW);
+                int aN = startN;
+                int bN = startN + (winN - 1);
+
+                // --- POSITIF (sans ancrage) : [maxRaw-1-(winP-1) .. maxRaw-1]
+                int startP = domain / 2;
+                int endP = maxRaw - 1; // exclut l’ancrage maxRaw
+                int winP = System.Math.Min(endP - startP + 1, EDGE_WINDOW);
+                int bP = endP;
+                int aP = endP - (winP - 1);
+
+                var neg = ((int maxGapTicks, double midDeg))
+                          mNeg!.MakeGenericMethod(tagType)
+                               .Invoke(null, new object[] { aN, bN, bits })!;
+
+                var pos = ((int maxGapTicks, double midDeg))
+                          mPos!.MakeGenericMethod(tagType)
+                               .Invoke(null, new object[] { aP, bP, bits })!;
+
+                var best = (neg.maxGapTicks >= pos.maxGapTicks) ? neg : pos;
+
+                int maxSigned = (1 << (bits - 1)) - 1;
+                double tickToDeg = 90.0 / System.Math.Max(1, maxSigned);
+                double tickToRad = (System.Math.PI / 2.0) / System.Math.Max(1, maxSigned);
+                double maxGapDeg = best.maxGapTicks * tickToDeg;
+                double maxErrDeg = 0.5 * maxGapDeg;
+                double maxErrRad = 0.5 * best.maxGapTicks * tickToRad;
+
+                report += $"\nB{bits}\t{maxErrDeg:0.00000}\t{maxErrRad:0.00000}" +
+                          $"\t{maxGapDeg:0.00000}\t{best.maxGapTicks}\t{best.midDeg:0.###}";
+            }
+
+            TestContext.Out.WriteLine(report);
+            Assert.Pass(report);
+        }
+
+
 
         #endregion
 
@@ -1702,7 +1698,7 @@ namespace FixedEngine.Tests.Math
         }
 
         [Test]
-        public void Asin_UIntN_B2toB31_MaxUserPerceivedAngleError_PositiveOnly()
+        public void Asin_UIntN_B2toB28_MaxUserPerceivedAngleError_PositiveOnly()
         {
             var asm = typeof(FixedEngine.Math.B2).Assembly;
             string report = "\nBn\tMaxErrDeg\tMaxErrRad\tMaxGapDeg\tMaxGapTicks\tAtDeg≈";
@@ -1747,7 +1743,103 @@ namespace FixedEngine.Tests.Math
             TestContext.Out.WriteLine(report);
             Assert.Pass(report);
         }
-    
+
+        [Test]
+        public void Asin_UIntN_B2toB28_MaxUserPerceivedAngleError_NegativeOnly()
+        {
+            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            string report = "\nBn\tMaxErrDeg\tMaxErrRad\tMaxGapDeg\tMaxGapTicks\tAtDeg≈";
+
+            // Même helper que pour le positif : il mesure le max gap sur [a..b]
+            var generic = typeof(FixedMathTest).GetMethod(
+                nameof(MeasureGapPositive),
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(generic, Is.Not.Null, "Helper MeasureGapPositive introuvable");
+
+            const int EDGE_WINDOW = 16384;
+
+            for (int bits = 2; bits <= 28; bits++)
+            {
+                var tagType = asm.GetType($"FixedEngine.Math.B{bits}", throwOnError: true);
+                int maxRaw = (1 << bits) - 1;
+                int domain = maxRaw + 1;
+
+                // Negative side only : [0 .. domain/2]
+                int start = 0;
+                int end = domain / 2;
+                int window = System.Math.Min(end - start + 1, EDGE_WINDOW);
+
+                var m = generic!.MakeGenericMethod(tagType);
+
+                // Fenêtre contiguë au bord négatif (ancrage raw==0 inclus)
+                var best = ((int maxGapTicks, double midDeg))
+                           m.Invoke(null, new object[] { start, start + (window - 1), bits })!;
+
+                int maxSigned = (1 << (bits - 1)) - 1;
+                double tickToDeg = 90.0 / System.Math.Max(1, maxSigned);
+                double tickToRad = (System.Math.PI / 2.0) / System.Math.Max(1, maxSigned);
+
+                double maxGapDeg = best.maxGapTicks * tickToDeg;
+                double maxErrDeg = 0.5 * maxGapDeg;
+                double maxErrRad = 0.5 * best.maxGapTicks * tickToRad;
+
+                report += $"\nB{bits}\t{maxErrDeg:0.00000}\t{maxErrRad:0.00000}" +
+                          $"\t{maxGapDeg:0.00000}\t{best.maxGapTicks}\t{best.midDeg:0.###}";
+            }
+
+            TestContext.Out.WriteLine(report);
+            Assert.Pass(report);
+        }
+
+        [Test]
+        public void Asin_UIntN_B2toB28_MaxError_IncludingAnchors()
+        {
+            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            string report = "\nBn\tMaxErrDeg\tMaxErrRad\tMaxGapDeg\tMaxGapTicks\tAtDeg≈";
+
+            // Récupère la MethodInfo du helper défini ci-dessus
+            var generic = typeof(FixedMathTest).GetMethod(
+                nameof(MeasureGapPositive),
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(generic, Is.Not.Null, "Helper MeasureGapPositive introuvable");
+
+            const int EDGE_WINDOW = 16384;
+
+            for (int bits = 2; bits <= 28; bits++)
+            {
+                var tagType = asm.GetType($"FixedEngine.Math.B{bits}", throwOnError: true);
+                int maxRaw = (1 << bits) - 1;
+                int domain = maxRaw + 1;
+
+                // Positive side only : [domain/2 .. maxRaw-1] 
+                // (on exclut la marche d’ancrage raw==maxRaw qui force 90° exact)
+                int start = domain / 2;
+                int end = maxRaw - 1;
+                int window = System.Math.Min(end - start + 1, EDGE_WINDOW);
+
+                var m = generic!.MakeGenericMethod(tagType);
+
+                // Fenêtre contiguë aux bords positifs, mais sans la toute dernière marche
+                var best = ((int maxGapTicks, double midDeg))
+                           m.Invoke(null, new object[] { end - (window - 1), end, bits })!;
+
+                int maxSigned = (1 << (bits - 1)) - 1;
+                double tickToDeg = 90.0 / System.Math.Max(1, maxSigned);
+                double tickToRad = (System.Math.PI / 2.0) / System.Math.Max(1, maxSigned);
+
+                double maxGapDeg = best.maxGapTicks * tickToDeg;
+                double maxErrDeg = 0.5 * maxGapDeg;
+                double maxErrRad = 0.5 * best.maxGapTicks * tickToRad;
+
+                report += $"\nB{bits}\t{maxErrDeg:0.00000}\t{maxErrRad:0.00000}" +
+                          $"\t{maxGapDeg:0.00000}\t{best.maxGapTicks}\t{best.midDeg:0.###}";
+            }
+
+            TestContext.Out.WriteLine(report);
+            Assert.Pass(report);
+        }
+
+
         #endregion
 
         // ----- ACOS -----
