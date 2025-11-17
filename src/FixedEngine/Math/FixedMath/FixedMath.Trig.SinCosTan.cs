@@ -1,5 +1,6 @@
 ﻿using FixedEngine.Core;
 using FixedEngine.LUT;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
@@ -156,27 +157,25 @@ namespace FixedEngine.Math
                 throw new NotSupportedException(
                     $"FixedMath.Sin LUT n'est pas défini pour Bn={bits} en signed (seulement B2 à B31 supportés).");
             uint uraw = (uint)raw & ((1u << bits) - 1);
-            // PAS DE MULTIPLICATION DU SIGNE ICI !
             return SinCore(uraw, bits, true);
         }
         #endregion
 
+        // TODO : Il faut interpoler à l'aide des TFrac
         #region --- SIN (UFixed) ---
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int Sin<TUInt, TFrac>(UFixed<TUInt, TFrac> angle)
             where TUInt : struct where TFrac : struct
         {
-            int bits = UIntN<TUInt>.BitsConst; 
-            if (bits < 2)
+            int bits = UIntN<TUInt>.BitsConst;
+            if (bits < 2 || bits > 31) 
                 throw new NotSupportedException(
-                    $"FixedMath.Sin(UFixed) : Bn={bits} non supporté en unsigned (min = B2).");
+                    $"FixedMath.Sin(Fixed) : Bn={bits} non supporté (B2..B31).");
 
-
-            uint uraw = angle.Raw & ((1u << bits) - 1);
-            return SinCore(uraw, bits, true);
+            return SinCore(angle.Raw, UIntN<TUInt>.BitsConst, true);
         }
         #endregion
 
+        // TODO : Il faut interpoler à l'aide des TFrac
         #region --- SIN (Fixed) ---
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int Sin<TInt, TFrac>(Fixed<TInt, TFrac> angle)
