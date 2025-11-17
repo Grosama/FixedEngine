@@ -1,4 +1,6 @@
-﻿namespace FixedEngine.Math
+﻿using FixedEngine.Core;
+
+namespace FixedEngine.Math
 {
 
     #region --- Fixed Qm.n ---

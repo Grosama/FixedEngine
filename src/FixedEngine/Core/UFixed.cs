@@ -1,9 +1,8 @@
-﻿using Newtonsoft.Json;
+﻿using FixedEngine.Math;
 using System;
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
-namespace FixedEngine.Math
+namespace FixedEngine.Core
 {
 
     public readonly struct UFixed<TUInt, TFrac>
@@ -19,7 +18,7 @@ namespace FixedEngine.Math
         public static readonly UFixed<TUInt, TFrac> MinValue = new UFixed<TUInt, TFrac>(UIntN<TUInt>.MinValue);
         public static readonly UFixed<TUInt, TFrac> MaxValue = new UFixed<TUInt, TFrac>(UIntN<TUInt>.MaxValue);
 
-        public static readonly UFixed<TUInt, TFrac> Epsilon = UFixed<TUInt, TFrac>.FromRaw(1u);
+        public static readonly UFixed<TUInt, TFrac> Epsilon = FromRaw(1u);
         public static readonly int ByteSize = sizeof(uint); // Q8.8, Q16.16, etc.
 
 
@@ -58,7 +57,7 @@ namespace FixedEngine.Math
 
         public float ToFloat()
         {
-            return (float)this.Raw / (1 << FracBitsConst);
+            return (float)Raw / (1 << FracBitsConst);
         }
 
         /*==================================
@@ -88,7 +87,7 @@ namespace FixedEngine.Math
 
         // UIntN <-> UFixed
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static explicit operator UFixed<TUInt, TFrac>(UIntN<TUInt> x) => new UFixed<TUInt, TFrac>(((uint)x) << FracBitsConst);
+        public static explicit operator UFixed<TUInt, TFrac>(UIntN<TUInt> x) => new UFixed<TUInt, TFrac>((uint)x << FracBitsConst);
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static explicit operator UIntN<TUInt>(UFixed<TUInt, TFrac> x) => new UIntN<TUInt>(x._raw.Raw >> FracBitsConst);
 
@@ -136,7 +135,7 @@ namespace FixedEngine.Math
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static UFixed<TUInt, TFrac> operator *(UFixed<TUInt, TFrac> a, UFixed<TUInt, TFrac> b)
-            => new UFixed<TUInt, TFrac>(Wrap((uint)(((ulong)a._raw * (ulong)b._raw) >> FracBitsConst)));
+            => new UFixed<TUInt, TFrac>(Wrap((uint)((ulong)a._raw * (ulong)b._raw >> FracBitsConst)));
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static UFixed<TUInt, TFrac> operator /(UFixed<TUInt, TFrac> a, UFixed<TUInt, TFrac> b)
@@ -227,7 +226,7 @@ namespace FixedEngine.Math
 
             uint v = a._raw.Raw >> n;
 
-            return (IntBitsConst == 32)
+            return IntBitsConst == 32
                 ? new UFixed<TUInt, TFrac>(v)
                 : new UFixed<TUInt, TFrac>(v & Mask.MASKS[IntBitsConst]);
         }
@@ -241,7 +240,7 @@ namespace FixedEngine.Math
                     $"n doit être dans [0,{limit}] pour ModPow2");
 
             if (n == 0)
-                return UFixed<TUInt, TFrac>.Zero;
+                return Zero;
 
             uint v = a._raw.Raw & Mask.MASKS[n];
             return new UFixed<TUInt, TFrac>(v); // wrap implicite dans le constructeur
@@ -375,7 +374,7 @@ namespace FixedEngine.Math
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override bool Equals(object obj)
-            => obj is UFixed<TUInt, TFrac> other && this._raw == other._raw;
+            => obj is UFixed<TUInt, TFrac> other && _raw == other._raw;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override int GetHashCode() => (int)_raw;
@@ -454,15 +453,15 @@ namespace FixedEngine.Math
             uint raw = x.Raw;
             if ((raw & mask) == 0u)
                 return new UFixed<TUInt, TFrac>(raw);
-            uint fracAdd = ((1u << FracBitsConst) - (raw & mask));
-            return new UFixed<TUInt, TFrac>((raw + fracAdd) & ~mask);
+            uint fracAdd = (1u << FracBitsConst) - (raw & mask);
+            return new UFixed<TUInt, TFrac>(raw + fracAdd & ~mask);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static UFixed<TUInt, TFrac> Round(UFixed<TUInt, TFrac> x)
         {
-            uint half = 1u << (FracBitsConst - 1);
-            uint rounded = (x.Raw + half) & ~((1u << FracBitsConst) - 1u);
+            uint half = 1u << FracBitsConst - 1;
+            uint rounded = x.Raw + half & ~((1u << FracBitsConst) - 1u);
             return new UFixed<TUInt, TFrac>(rounded);
         }
         #endregion
@@ -483,7 +482,7 @@ namespace FixedEngine.Math
         {
             uint sum = a.Raw + b.Raw;                 // addition pleine largeur (32 bits)
                                                       // branch‑less : si sum > MaxConst on force MaxConst, sinon on garde sum
-            sum = (sum > MaxConst) ? MaxConst : sum;  // RyuJIT ⇒ CMP + CMOV, zéro saut
+            sum = sum > MaxConst ? MaxConst : sum;  // RyuJIT ⇒ CMP + CMOV, zéro saut
             return new UFixed<TUInt, TFrac>(sum);     // ctor wrap, déjà masqué
         }
 
@@ -491,7 +490,7 @@ namespace FixedEngine.Math
         public static UFixed<TUInt, TFrac> SubSat(UFixed<TUInt, TFrac> a, UFixed<TUInt, TFrac> b)
         {
             uint diff = a.Raw - b.Raw;               // soustraction wrap 32 bits
-            diff = (a.Raw < b.Raw) ? 0u : diff;      // si underflow → 0  (CMP+CMOV, zéro saut)
+            diff = a.Raw < b.Raw ? 0u : diff;      // si underflow → 0  (CMP+CMOV, zéro saut)
             return new UFixed<TUInt, TFrac>(diff);   // ctor = valeur déjà masquée
         }
 
@@ -504,7 +503,7 @@ namespace FixedEngine.Math
             uint res = (uint)(prod64 >> FracBitsConst);
 
             /* 2. Clamp branch‑less : CMP + CMOV émis par RyuJIT */
-            res = (res > MaxConst) ? MaxConst : res;
+            res = res > MaxConst ? MaxConst : res;
 
             /* 3. Ctor wrap (déjà masqué) */
             return new UFixed<TUInt, TFrac>(res);
@@ -520,8 +519,8 @@ namespace FixedEngine.Math
             uint v = val.Raw;
 
             // Deux ternaires : RyuJIT génère CMP + CMOV, pas de branche
-            v = (v < min.Raw) ? min.Raw : v;   // max(v, min)
-            v = (v > max.Raw) ? max.Raw : v;   // min(v, max)
+            v = v < min.Raw ? min.Raw : v;   // max(v, min)
+            v = v > max.Raw ? max.Raw : v;   // min(v, max)
 
             return new UFixed<TUInt, TFrac>(v);   // valeur déjà dans 0..MaxConst
         }
@@ -533,7 +532,7 @@ namespace FixedEngine.Math
             uint one = 1u << FracBitsConst;         // 1.0 en Q‑format
 
             // min(v, 1) – RyuJIT ⇒ CMP + CMOV, zéro branche
-            v = (v > one) ? one : v;
+            v = v > one ? one : v;
 
             return new UFixed<TUInt, TFrac>(v);     // déjà masqué
         }
@@ -548,12 +547,12 @@ namespace FixedEngine.Math
             uint offsetMax)
         {
 
-            uint vLo = (min.Raw + offsetMin) & MaxConst;
-            uint vHi = (max.Raw + offsetMax) & MaxConst;
+            uint vLo = min.Raw + offsetMin & MaxConst;
+            uint vHi = max.Raw + offsetMax & MaxConst;
             uint v = val.Raw & MaxConst;
 
-            v = (v < vLo) ? vLo : v;   // max(v, vLo)
-            v = (v > vHi) ? vHi : v;   // min(v, vHi)
+            v = v < vLo ? vLo : v;   // max(v, vLo)
+            v = v > vHi ? vHi : v;   // min(v, vHi)
 
             return new UFixed<TUInt, TFrac>(v);
         }
@@ -612,7 +611,7 @@ namespace FixedEngine.Math
             for (int i = 0; i < IntBitsConst; i++)
             {
                 r <<= 1;
-                r |= (v & 1);
+                r |= v & 1;
                 v >>= 1;
             }
             return new UFixed<TUInt, TFrac>(r);
@@ -644,7 +643,7 @@ namespace FixedEngine.Math
             int count = 0;
             for (int i = IntBitsConst - 1; i >= 0; i--)
             {
-                if ((v & (1u << i)) == 0)
+                if ((v & 1u << i) == 0)
                     count++;
                 else
                     break;
@@ -659,7 +658,7 @@ namespace FixedEngine.Math
             int count = 0;
             for (int i = 0; i < IntBitsConst; i++)
             {
-                if ((v & (1u << i)) == 0)
+                if ((v & 1u << i) == 0)
                     count++;
                 else
                     break;
@@ -672,7 +671,7 @@ namespace FixedEngine.Math
         {
             n = n % IntBitsConst;
             uint v = a.Raw;
-            uint res = ((v << n) | (v >> (IntBitsConst - n))) & Mask.MASKS[IntBitsConst];
+            uint res = (v << n | v >> IntBitsConst - n) & Mask.MASKS[IntBitsConst];
             return new UFixed<TUInt, TFrac>(res);
         }
 
@@ -681,7 +680,7 @@ namespace FixedEngine.Math
         {
             n = n % IntBitsConst;
             uint v = a.Raw;
-            uint res = ((v >> n) | (v << (IntBitsConst - n))) & Mask.MASKS[IntBitsConst];
+            uint res = (v >> n | v << IntBitsConst - n) & Mask.MASKS[IntBitsConst];
             return new UFixed<TUInt, TFrac>(res);
         }
 
@@ -690,7 +689,7 @@ namespace FixedEngine.Math
         {
             uint v = a.Raw;
             for (int i = IntBitsConst - 1; i >= 0; i--)
-                if ((v & (1u << i)) != 0)
+                if ((v & 1u << i) != 0)
                     return i;
             return -1; // Aucun bit à 1
         }
@@ -700,7 +699,7 @@ namespace FixedEngine.Math
         {
             uint v = a.Raw;
             for (int i = 0; i < IntBitsConst; i++)
-                if ((v & (1u << i)) != 0)
+                if ((v & 1u << i) != 0)
                     return i;
             return -1; // Aucun bit à 1
         }
@@ -732,7 +731,7 @@ namespace FixedEngine.Math
         /// <summary>
         /// Valeur moitié (0.5)
         /// </summary>
-        public static UFixed<TUInt, TFrac> Half => new UFixed<TUInt, TFrac>(1u << (FracBitsConst - 1));
+        public static UFixed<TUInt, TFrac> Half => new UFixed<TUInt, TFrac>(1u << FracBitsConst - 1);
 
         /// <summary>
         /// Tous les bits à 1 (utile pour debug/masking, max unsigned)
@@ -786,7 +785,7 @@ namespace FixedEngine.Math
             int byteCount = (IntBitsConst + 7) / 8;
             if (n < 0 || n >= byteCount)
                 throw new ArgumentOutOfRangeException(nameof(n), $"n doit être entre 0 et {byteCount - 1} pour UFixed<{typeof(TUInt).Name}>");
-            return (byte)((a.Raw >> (n * 8)) & 0xFF);
+            return (byte)(a.Raw >> n * 8 & 0xFF);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -794,7 +793,7 @@ namespace FixedEngine.Math
         {
             int byteCount = (IntBitsConst + 7) / 8;
             byte[] bytes = new byte[byteCount];
-            uint v = this.Raw;
+            uint v = Raw;
             for (int i = 0; i < byteCount; i++)
             {
                 bytes[i] = (byte)(v & 0xFF);
@@ -811,7 +810,7 @@ namespace FixedEngine.Math
                 throw new ArgumentException($"Le tableau d'octets doit contenir au moins {byteCount} éléments pour UFixed<{typeof(TUInt).Name}>");
             uint v = 0;
             for (int i = 0; i < byteCount; i++)
-                v |= (uint)bytes[i] << (8 * i);
+                v |= (uint)bytes[i] << 8 * i;
             return new UFixed<TUInt, TFrac>(v);
         }
 
@@ -821,7 +820,7 @@ namespace FixedEngine.Math
             int byteCount = (IntBitsConst + 7) / 8;
             if (index < 0 || index >= byteCount)
                 throw new ArgumentOutOfRangeException(nameof(index), $"index doit être entre 0 et {byteCount - 1} pour UFixed<{typeof(TUInt).Name}>");
-            return (byte)((this.Raw >> (index * 8)) & 0xFF);
+            return (byte)(Raw >> index * 8 & 0xFF);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -830,8 +829,8 @@ namespace FixedEngine.Math
             int byteCount = (IntBitsConst + 7) / 8;
             if (n < 0 || n >= byteCount)
                 throw new ArgumentOutOfRangeException(nameof(n), $"Octet n doit être dans [0,{byteCount - 1}] pour UFixed<{typeof(TUInt).Name}>");
-            uint mask = ~(0xFFu << (n * 8));
-            uint v = (this.Raw & mask) | ((uint)b << (n * 8));
+            uint mask = ~(0xFFu << n * 8);
+            uint v = Raw & mask | (uint)b << n * 8;
             return new UFixed<TUInt, TFrac>(v);
         }
 
@@ -868,7 +867,7 @@ namespace FixedEngine.Math
             int bits = IntBitsConst;
             uint uval = Raw & Mask.UNSIGNED_MAX[bits];
             string bin = Convert.ToString(uval, 2).PadLeft(bits, '0');
-            string hex = uval.ToString("X" + ((bits + 3) / 4));
+            string hex = uval.ToString("X" + (bits + 3) / 4);
             return $"UFixed<{typeof(TUInt).Name}, {typeof(TFrac).Name}>({Raw}) [bin={bin} hex={hex}]";
         }
 
@@ -884,7 +883,7 @@ namespace FixedEngine.Math
         {
             int byteCount = (IntBitsConst + 7) / 8;
             uint v = Raw;
-            string hex = v.ToString("X" + (byteCount * 2)); // "X4" pour 16 bits
+            string hex = v.ToString("X" + byteCount * 2); // "X4" pour 16 bits
             return withPrefix ? "0x" + hex : hex;
         }
         #endregion
@@ -1038,35 +1037,102 @@ namespace FixedEngine.Math
          * ToJsonWithMeta
          * FromJsonWithMeta
          ==================================*/
-        #region --- SERIALISATION META (exhaustif, multi-N, erreurs) ---
+        #region --- SERIALISATION META ---
         public string ToJsonWithMeta()
-            => $"{{ \"uintBits\": {BitsOf<TUInt>.Value}, \"fracBits\": {BitsOf<TFrac>.Value}, \"raw\": {Raw} }}";
-
-        public static UFixed<TA, TB> FromJsonWithMeta<TA, TB>(string json)
-             where TA : struct
-             where TB : struct
         {
-            try
-            {
-                var obj = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
-                int uintBits = Convert.ToInt32(obj["uintBits"]);
-                int fracBits = Convert.ToInt32(obj["fracBits"]);
-                if (uintBits != BitsOf<TA>.Value)
-                    throw new Exception($"Meta-uintBits ({uintBits}) ne correspond pas au type générique {typeof(TA).Name} ({BitsOf<TA>.Value})");
-                if (fracBits != BitsOf<TB>.Value)
-                    throw new Exception($"Meta-fracBits ({fracBits}) ne correspond pas au type générique {typeof(TB).Name} ({BitsOf<TB>.Value})");
-                uint raw = Convert.ToUInt32(obj["raw"]);
-                return UFixed<TA, TB>.FromRaw(raw);
-            }
-            catch (Exception ex)
-            {
-                throw new FormatException("Erreur lors du parsing JSON meta pour UFixed.", ex);
-            }
-            
-
-
+            return $"{{\"uintBits\":{BitsOf<TUInt>.Value},\"fracBits\":{BitsOf<TFrac>.Value},\"raw\":{Raw}}}";
         }
 
+        public static UFixed<TA, TB> FromJsonWithMeta<TA, TB>(string json)
+            where TA : struct
+            where TB : struct
+        {
+            if (json == null)
+                throw new FormatException("JSON meta cannot be null.");
+
+
+            int uintBitsPos = json.IndexOf("\"uintBits\":", StringComparison.Ordinal);
+            int fracBitsPos = json.IndexOf("\"fracBits\":", StringComparison.Ordinal);
+            int rawPos = json.IndexOf("\"raw\":", StringComparison.Ordinal);
+            if (uintBitsPos < 0 || fracBitsPos < 0 || rawPos < 0)
+                throw new FormatException("JSON meta invalide : champs 'uintBits', 'fracBits' ou 'raw' manquants.");
+
+            int uintBits = ParseIntAfterColon(json, uintBitsPos + 11);
+            int fracBits = ParseIntAfterColon(json, fracBitsPos + 11);
+            uint raw = ParseUIntAfterColon(json, rawPos + 6);
+
+            // 3. Validation des bits
+            if (uintBits != BitsOf<TA>.Value)
+                throw new FormatException(
+                    $"Meta-uintBits ({uintBits}) ≠ type générique {typeof(TA).Name} ({BitsOf<TA>.Value})");
+            if (fracBits != BitsOf<TB>.Value)
+                throw new FormatException(
+                    $"Meta-fracBits ({fracBits}) ≠ type générique {typeof(TB).Name} ({BitsOf<TB>.Value})");
+
+            return UFixed<TA, TB>.FromRaw(raw);
+        }
+
+        /* ---------- Helper int (bits) ---------- */
+        private static int ParseIntAfterColon(string s, int start)
+        {
+            int i = start;
+            while (i < s.Length && char.IsWhiteSpace(s[i])) i++;
+
+            int sign = 1;
+            if (i < s.Length && s[i] == '-')
+            {
+                sign = -1; i++;
+                while (i < s.Length && char.IsWhiteSpace(s[i])) i++;
+            }
+            else if (i < s.Length && s[i] == '+')
+            {
+                i++;
+                while (i < s.Length && char.IsWhiteSpace(s[i])) i++;
+            }
+
+            if (i >= s.Length || !char.IsDigit(s[i]))
+                throw new FormatException("Aucun chiffre trouvé après le champ.");
+
+            int value = 0;
+            while (i < s.Length && char.IsDigit(s[i]))
+            {
+                int d = s[i] - '0';
+                if (value > (int.MaxValue - d) / 10)
+                    throw new FormatException("Valeur numérique trop grande.");
+                value = value * 10 + d;
+                i++;
+            }
+            return value * sign;
+        }
+
+        /* ---------- Helper uint (raw) ---------- */
+        private static uint ParseUIntAfterColon(string s, int start)
+        {
+            int i = start;
+            while (i < s.Length && char.IsWhiteSpace(s[i])) i++;
+
+            if (i < s.Length && s[i] == '-')
+                throw new FormatException("Valeur négative non autorisée pour UFixed raw.");
+            if (i < s.Length && s[i] == '+')
+            {
+                i++;
+                while (i < s.Length && char.IsWhiteSpace(s[i])) i++;
+            }
+
+            if (i >= s.Length || !char.IsDigit(s[i]))
+                throw new FormatException("Aucun chiffre trouvé après le champ.");
+
+            uint value = 0u;
+            while (i < s.Length && char.IsDigit(s[i]))
+            {
+                uint d = (uint)(s[i] - '0');
+                if (value > (uint.MaxValue - d) / 10u)
+                    throw new FormatException("Valeur numérique trop grande.");
+                value = value * 10u + d;
+                i++;
+            }
+            return value;
+        }
         #endregion
 
         /// <summary>

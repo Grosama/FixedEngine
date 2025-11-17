@@ -1,4 +1,5 @@
-﻿using System;
+﻿using FixedEngine.Core;
+using System;
 
 namespace FixedEngine.Math
 {

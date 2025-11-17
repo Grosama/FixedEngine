@@ -1,9 +1,8 @@
-﻿using Newtonsoft.Json;
+﻿using FixedEngine.Math;
 using System;
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
-namespace FixedEngine.Math
+namespace FixedEngine.Core
 {
 
     public readonly struct UIntN<TBits>
@@ -35,7 +34,7 @@ namespace FixedEngine.Math
             if ((uint)BitsConst - 1u >= 32u) // test branch-free
                 throw new ArgumentOutOfRangeException(nameof(BitsConst));
 #endif
-            _value = (BitsConst == 32) ? value : value & MaskConst;
+            _value = BitsConst == 32 ? value : value & MaskConst;
         }
 
         public UIntN(int value) : this((uint)value) { }
@@ -46,17 +45,17 @@ namespace FixedEngine.Math
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static uint Wrap(uint v) =>
-            (BitsConst == 32) ? v : v & MaskConst;
+            BitsConst == 32 ? v : v & MaskConst;
 
 
         public float ToFloat()
         {
-            return (float)this.Raw;
+            return Raw;
         }
 
         public static float ToFloat(UIntN<TBits> value)
         {
-            return (float)value.Raw;
+            return value.Raw;
         }
         /*==================================
          * --- CONVERSION EXPLICITES ---
@@ -79,13 +78,13 @@ namespace FixedEngine.Math
 
         // float <-> UIntN
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static explicit operator float(UIntN<TBits> x) => (float)x._value;
+        public static explicit operator float(UIntN<TBits> x) => x._value;
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static explicit operator UIntN<TBits>(float x) => new UIntN<TBits>((uint)x);
 
         // double <-> UIntN
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static explicit operator double(UIntN<TBits> x) => (double)x._value;
+        public static explicit operator double(UIntN<TBits> x) => x._value;
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static explicit operator UIntN<TBits>(double x)
         {
@@ -235,7 +234,7 @@ namespace FixedEngine.Math
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static UIntN<TBits> DivPow2(UIntN<TBits> a, int n)
         {
-            uint limit = (BitsConst == 32) ? 32u : (uint)BitsConst;
+            uint limit = BitsConst == 32 ? 32u : (uint)BitsConst;
             if ((uint)n >= limit)
                 throw new ArgumentOutOfRangeException(nameof(n),
                     $"n doit être dans [0,{limit - 1}] pour DivPow2");
@@ -246,7 +245,7 @@ namespace FixedEngine.Math
             uint v = a._value >> n;
 
             // BitsConst constant => la branche morte disparaît
-            return (BitsConst == 32)
+            return BitsConst == 32
                 ? new UIntN<TBits>(v, true)   // constructeur interne, aucun masque
                 : new UIntN<TBits>(v);        // un seul masque (dans le ctor)
         }
@@ -254,13 +253,13 @@ namespace FixedEngine.Math
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static UIntN<TBits> ModPow2(UIntN<TBits> a, int n)
         {
-            uint limit = (BitsConst == 32) ? 32u : (uint)BitsConst;
+            uint limit = BitsConst == 32 ? 32u : (uint)BitsConst;
             if ((uint)n > limit)
                 throw new ArgumentOutOfRangeException(nameof(n),
                     $"n doit être dans [0,{limit}] pour ModPow2");
 
             if (n == 0)                       // a % 1 == 0
-                return UIntN<TBits>.Zero;
+                return Zero;
 
             uint v = a._value & Mask.MASKS[n];
 
@@ -382,7 +381,7 @@ namespace FixedEngine.Math
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override bool Equals(object obj)
-            => obj is UIntN<TBits> other && this._value == other._value;
+            => obj is UIntN<TBits> other && _value == other._value;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override int GetHashCode()
@@ -431,7 +430,7 @@ namespace FixedEngine.Math
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static UIntN<TBits> Avg(UIntN<TBits> a, UIntN<TBits> b)
         {
-            uint sum = (a._value + b._value) & Mask.MASKS[BitsConst];
+            uint sum = a._value + b._value & Mask.MASKS[BitsConst];
             return new UIntN<TBits>(sum / 2);
         }
 
@@ -439,7 +438,7 @@ namespace FixedEngine.Math
         public static bool IsPowerOfTwo(UIntN<TBits> a)
         {
             // 0 n'est pas une puissance de deux, test rapide bitwise
-            return a._value != 0 && (a._value & (a._value - 1)) == 0;
+            return a._value != 0 && (a._value & a._value - 1) == 0;
         }
         #endregion
 
@@ -460,7 +459,7 @@ namespace FixedEngine.Math
             uint sum = a._value + b._value;          // addition pleine largeur
                                                      // Saturation : si sum dépasse MaxConst on force MaxConst.
                                                      // RyuJIT émet   CMP / CMOV  => branch‑less.
-            uint res = (sum <= MaxConst) ? sum : MaxConst;
+            uint res = sum <= MaxConst ? sum : MaxConst;
             return new UIntN<TBits>(res, true);      // ctor interne = pas de re‑AND
         }
 
@@ -469,7 +468,7 @@ namespace FixedEngine.Math
         {
             uint diff = a._value - b._value;          // wrap mod 2^32
                                                       // Si a < b, on force 0, sinon on garde diff (CMOV branch‑less).
-            diff = (a._value >= b._value) ? diff : 0u;
+            diff = a._value >= b._value ? diff : 0u;
             return new UIntN<TBits>(diff, true);      // ctor interne : pas de re‑masquage
         }
 
@@ -481,7 +480,7 @@ namespace FixedEngine.Math
             {
                 uint prod = a._value * b._value;            // 32‑bit MUL, une seule µop
                                                             // clamp branch‑less : CMOV émis par RyuJIT
-                uint res = (prod <= MaskConst) ? prod : MaskConst;
+                uint res = prod <= MaskConst ? prod : MaskConst;
                 return new UIntN<TBits>(res, true);         // ctor interne, pas de re‑AND
             }
 
@@ -495,8 +494,8 @@ namespace FixedEngine.Math
         public static UIntN<TBits> Clamp(UIntN<TBits> val, UIntN<TBits> min, UIntN<TBits> max)
         {
             uint v = val._value;
-            v = (v < min._value) ? min._value : v;
-            v = (v > max._value) ? max._value : v;
+            v = v < min._value ? min._value : v;
+            v = v > max._value ? max._value : v;
             return new UIntN<TBits>(v, true);
         }
 
@@ -504,7 +503,7 @@ namespace FixedEngine.Math
         public static UIntN<TBits> Clamp01(UIntN<TBits> val)
         {
             uint v = val._value;
-            v = (v > 1u) ? 1u : v;        // RyuJIT → CMP + CMOV, zéro branch mis‑pred
+            v = v > 1u ? 1u : v;        // RyuJIT → CMP + CMOV, zéro branch mis‑pred
             return new UIntN<TBits>(v, true);   // ctor interne = pas de AND final
         }
 
@@ -517,11 +516,11 @@ namespace FixedEngine.Math
 
             // borne basse ajustée puis clampée 0..MaskConst
             int vLo = (int)min._value + offsetMin;
-            vLo = vLo < 0 ? 0 : (vLo > (int)MaskConst ? (int)MaskConst : vLo);
+            vLo = vLo < 0 ? 0 : vLo > (int)MaskConst ? (int)MaskConst : vLo;
 
             // borne haute ajustée puis clampée
             int vHi = (int)max._value + offsetMax;
-            vHi = vHi < 0 ? 0 : (vHi > (int)MaskConst ? (int)MaskConst : vHi);
+            vHi = vHi < 0 ? 0 : vHi > (int)MaskConst ? (int)MaskConst : vHi;
 
             // Sélection branch‑less : si v < min  → vLo
             //                         si v > max  → vHi
@@ -592,7 +591,7 @@ namespace FixedEngine.Math
             for (int i = 0; i < BitsConst; i++)
             {
                 r <<= 1;
-                r |= (v & 1);
+                r |= v & 1;
                 v >>= 1;
             }
             return new UIntN<TBits>(r);
@@ -624,7 +623,7 @@ namespace FixedEngine.Math
             int count = 0;
             for (int i = BitsConst - 1; i >= 0; i--)
             {
-                if ((v & (1u << i)) == 0)
+                if ((v & 1u << i) == 0)
                     count++;
                 else
                     break;
@@ -639,7 +638,7 @@ namespace FixedEngine.Math
             int count = 0;
             for (int i = 0; i < BitsConst; i++)
             {
-                if ((v & (1u << i)) == 0)
+                if ((v & 1u << i) == 0)
                     count++;
                 else
                     break;
@@ -652,7 +651,7 @@ namespace FixedEngine.Math
         {
             n %= BitsConst;
             uint v = a._value;
-            uint res = ((v << n) | (v >> (BitsConst - n))) & Mask.MASKS[BitsConst];
+            uint res = (v << n | v >> BitsConst - n) & Mask.MASKS[BitsConst];
             return new UIntN<TBits>(res);
         }
 
@@ -662,7 +661,7 @@ namespace FixedEngine.Math
 
             n %= BitsConst;
             uint v = a._value;
-            uint res = ((v >> n) | (v << (BitsConst - n))) & Mask.MASKS[BitsConst];
+            uint res = (v >> n | v << BitsConst - n) & Mask.MASKS[BitsConst];
             return new UIntN<TBits>(res);
         }
 
@@ -671,7 +670,7 @@ namespace FixedEngine.Math
         {
             uint v = a._value;
             for (int i = BitsConst - 1; i >= 0; i--)
-                if ((v & (1u << i)) != 0)
+                if ((v & 1u << i) != 0)
                     return i;
             return -1; // Aucun bit à 1
         }
@@ -681,7 +680,7 @@ namespace FixedEngine.Math
         {
             uint v = a._value;
             for (int i = 0; i < BitsConst; i++)
-                if ((v & (1u << i)) != 0)
+                if ((v & 1u << i) != 0)
                     return i;
             return -1; // Aucun bit à 1
         }
@@ -721,7 +720,7 @@ namespace FixedEngine.Math
                 //int bits = BitsConst;
                 if (BitsConst == 0)
                     return new UIntN<TBits>(0);
-                return new UIntN<TBits>(1u << (BitsConst - 1));
+                return new UIntN<TBits>(1u << BitsConst - 1);
             }
         }
 
@@ -750,10 +749,10 @@ namespace FixedEngine.Math
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static byte Byte(UIntN<TBits> a, int n)
         {
-            int byteCount = (UIntN<TBits>.BitsConst + 7) / 8;
+            int byteCount = (BitsConst + 7) / 8;
             if (n < 0 || n >= byteCount)
                 throw new ArgumentOutOfRangeException(nameof(n), $"n doit être entre 0 et {byteCount - 1} pour UIntN<{typeof(TBits).Name}>");
-            return (byte)((a._value >> (n * 8)) & Mask.MASKS[8]);
+            return (byte)(a._value >> n * 8 & Mask.MASKS[8]);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -779,7 +778,7 @@ namespace FixedEngine.Math
 
             uint v = 0;
             for (int i = 0; i < byteCount; i++)
-                v |= (uint)bytes[i] << (8 * i);
+                v |= (uint)bytes[i] << 8 * i;
 
             return new UIntN<TBits>(v);
         }
@@ -790,7 +789,7 @@ namespace FixedEngine.Math
             int byteCount = (BitsConst + 7) / 8;
             if (index < 0 || index >= byteCount)
                 throw new ArgumentOutOfRangeException(nameof(index), $"index hors limites : [0, {byteCount - 1}] pour UIntN<{typeof(TBits).Name}>");
-            return (byte)((_value >> (index * 8)) & Mask.MASKS[8]);
+            return (byte)(_value >> index * 8 & Mask.MASKS[8]);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -799,8 +798,8 @@ namespace FixedEngine.Math
             int byteCount = (BitsConst + 7) / 8;
             if (n < 0 || n >= byteCount)
                 throw new ArgumentOutOfRangeException(nameof(n), $"Octet n doit être dans [0,{byteCount - 1}] pour UIntN<{typeof(TBits).Name}>");
-            uint mask = ~(Mask.MASKS[8] << (n * 8));
-            uint v = (_value & mask) | ((uint)b << (n * 8));
+            uint mask = ~(Mask.MASKS[8] << n * 8);
+            uint v = _value & mask | (uint)b << n * 8;
             return new UIntN<TBits>(v);
         }
 
@@ -995,28 +994,93 @@ namespace FixedEngine.Math
          * ToJsonWithMeta
          * FromJsonWithMeta
          ==================================*/
-        #region --- SERIALISATION META (exhaustif, multi-N, erreurs) ---
-        public string ToJsonWithMeta() 
-            => $"{{ \"bits\": {BitsOf<TBits>.Value}, \"raw\": {Raw} }}";
+        #region --- SERIALISATION META ---
+        public string ToJsonWithMeta()
+        {
+            return $"{{\"bits\":{BitsOf<TBits>.Value},\"raw\":{Raw}}}";
+        }
 
         public static UIntN<T> FromJsonWithMeta<T>(string json) where T : struct
         {
-            try
-            {
-                var obj = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
-                int bits = Convert.ToInt32(obj["bits"]);
-                if (bits != BitsOf<T>.Value)
-                    throw new Exception($"Meta-bits ({bits}) ne correspond pas au type générique {typeof(T).Name} ({BitsOf<T>.Value})");
-                uint raw = Convert.ToUInt32(obj["raw"]);
-                return UIntN<T>.FromRaw(raw);
-            }
-            catch (Exception ex)
-            {
-                throw new FormatException("Erreur lors du parsing JSON meta pour UIntN.", ex);
-            }
+            if (json == null)
+                throw new FormatException("JSON meta cannot be null.");
+
+            int bitsPos = json.IndexOf("\"bits\":", StringComparison.Ordinal);
+            int rawPos = json.IndexOf("\"raw\":", StringComparison.Ordinal);
+            if (bitsPos < 0 || rawPos < 0)
+                throw new FormatException("JSON meta invalide : champs 'bits' ou 'raw' manquants.");
+
+            int bits = ParseIntAfterColon(json, bitsPos + 7);   // int
+            uint raw = ParseUIntAfterColon(json, rawPos + 6);   // uint
+
+            if (bits != BitsOf<T>.Value)
+                throw new FormatException(
+                    $"Meta-bits ({bits}) ≠ type générique {typeof(T).Name} ({BitsOf<T>.Value})");
+
+            return UIntN<T>.FromRaw(raw);
         }
 
+        /* ---------- Helper int (bits) ---------- */
+        private static int ParseIntAfterColon(string s, int start)
+        {
+            int i = start;
+            while (i < s.Length && char.IsWhiteSpace(s[i])) i++;
 
+            int sign = 1;
+            if (i < s.Length && s[i] == '-')
+            {
+                sign = -1; i++;
+                while (i < s.Length && char.IsWhiteSpace(s[i])) i++;
+            }
+            else if (i < s.Length && s[i] == '+')
+            {
+                i++;
+                while (i < s.Length && char.IsWhiteSpace(s[i])) i++;
+            }
+
+            if (i >= s.Length || !char.IsDigit(s[i]))
+                throw new FormatException("Aucun chiffre trouvé après le champ.");
+
+            int value = 0;
+            while (i < s.Length && char.IsDigit(s[i]))
+            {
+                int d = s[i] - '0';
+                if (value > (int.MaxValue - d) / 10)
+                    throw new FormatException("Valeur numérique trop grande.");
+                value = value * 10 + d;
+                i++;
+            }
+            return value * sign;
+        }
+
+        /* ---------- Helper uint (raw) ---------- */
+        private static uint ParseUIntAfterColon(string s, int start)
+        {
+            int i = start;
+            while (i < s.Length && char.IsWhiteSpace(s[i])) i++;
+
+            if (i < s.Length && s[i] == '-')
+                throw new FormatException("Valeur négative non autorisée pour UIntN raw.");
+            if (i < s.Length && s[i] == '+')
+            {
+                i++;
+                while (i < s.Length && char.IsWhiteSpace(s[i])) i++;
+            }
+
+            if (i >= s.Length || !char.IsDigit(s[i]))
+                throw new FormatException("Aucun chiffre trouvé après le champ.");
+
+            uint value = 0u;
+            while (i < s.Length && char.IsDigit(s[i]))
+            {
+                uint d = (uint)(s[i] - '0');
+                if (value > (uint.MaxValue - d) / 10u)
+                    throw new FormatException("Valeur numérique trop grande.");
+                value = value * 10u + d;
+                i++;
+            }
+            return value;
+        }
         #endregion
 
         public static UIntN<TBits> Lerp<TInt, TFrac>(
@@ -1025,7 +1089,7 @@ namespace FixedEngine.Math
             where TFrac : struct
         {
             uint diff = b.Raw - a.Raw;
-            uint lerpRaw = a.Raw + (uint)(((ulong)diff * (ulong)t.Raw) >> Fixed<TInt, TFrac>.FracBitsConst);
+            uint lerpRaw = a.Raw + (uint)(diff * (ulong)t.Raw >> Fixed<TInt, TFrac>.FracBitsConst);
             return new UIntN<TBits>(lerpRaw);
         }
 

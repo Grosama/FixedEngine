@@ -1,7 +1,8 @@
 ﻿using NUnit.Framework;
 using FixedEngine.Math;
+using FixedEngine.Core;
 
-namespace FixedEngine.Tests.Math
+namespace FixedEngine.Tests.Core
 {
     [TestFixture]
     public class UFixedTests

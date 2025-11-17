@@ -7,6 +7,7 @@
  * - Origin/Pivot (Vec2)
  * ========================================== */
 
+using FixedEngine.Core;
 using FixedEngine.Math;
 using System;
 using System.Linq;

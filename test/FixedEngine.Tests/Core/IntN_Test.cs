@@ -1,8 +1,9 @@
-﻿using FixedEngine.Math;
+﻿using FixedEngine.Core;
+using FixedEngine.Math;
 using NUnit.Framework;
 using NUnit.Framework.Legacy;
 
-namespace FixedEngine.Tests.Math
+namespace FixedEngine.Tests.Core
 {
     [TestFixture]
     public class IntNTests

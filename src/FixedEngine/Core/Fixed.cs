@@ -1,9 +1,8 @@
-﻿using Newtonsoft.Json;
+﻿using FixedEngine.Math;
 using System;
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
-namespace FixedEngine.Math
+namespace FixedEngine.Core
 {
 
     public readonly struct Fixed<TInt, TFrac>
@@ -22,7 +21,7 @@ namespace FixedEngine.Math
         public static readonly Fixed<TInt, TFrac> MinValue = new Fixed<TInt, TFrac>(IntN<TInt>.MinValue);
         public static readonly Fixed<TInt, TFrac> MaxValue = new Fixed<TInt, TFrac>(IntN<TInt>.MaxValue);
 
-        public static readonly Fixed<TInt, TFrac> Epsilon = Fixed<TInt, TFrac>.FromRaw(1);
+        public static readonly Fixed<TInt, TFrac> Epsilon = FromRaw(1);
         public static readonly int ByteSize = sizeof(int); // Q8.8, Q16.16, etc.
 
         private readonly IntN<TInt> _raw;
@@ -62,7 +61,7 @@ namespace FixedEngine.Math
 
         public float ToFloat()
         {
-            return (float)this.Raw / (1 << FracBitsConst);
+            return (float)Raw / (1 << FracBitsConst);
         }
 
         /*==================================
@@ -98,7 +97,7 @@ namespace FixedEngine.Math
 
         // UIntN <-> Fixed
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static explicit operator Fixed<TInt, TFrac>(UIntN<TInt> x) => new Fixed<TInt, TFrac>(((int)(uint)x) << FracBitsConst);
+        public static explicit operator Fixed<TInt, TFrac>(UIntN<TInt> x) => new Fixed<TInt, TFrac>((int)(uint)x << FracBitsConst);
         public static explicit operator UIntN<TInt>(Fixed<TInt, TFrac> x)
         {
             //int bits = BitsOf<TInt>.Value;
@@ -163,7 +162,7 @@ namespace FixedEngine.Math
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Fixed<TInt, TFrac> operator *(Fixed<TInt, TFrac> a, Fixed<TInt, TFrac> b)
         {
-            long prod = (long)a.Raw * (long)b.Raw; // multiplie sur 64 bits
+            long prod = a.Raw * (long)b.Raw; // multiplie sur 64 bits
             int result = (int)(prod >> FracBitsConst); // shift, puis wrap via le ctor
             return new Fixed<TInt, TFrac>(result); // wrap via IntN<TInt>
         }
@@ -268,7 +267,7 @@ namespace FixedEngine.Math
                 throw new ArgumentOutOfRangeException(nameof(n),
                     $"n doit être dans [0,{limit}] pour ModPow2");
             if (n == 0)
-                return Fixed<TInt, TFrac>.Zero;
+                return Zero;
             int v = a.Raw & (int)Mask.MASKS[n];
             return new Fixed<TInt, TFrac>(v);
         }
@@ -421,7 +420,7 @@ namespace FixedEngine.Math
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override bool Equals(object obj)
-            => obj is Fixed<TInt, TFrac> other && this.Raw == other.Raw;
+            => obj is Fixed<TInt, TFrac> other && Raw == other.Raw;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public override int GetHashCode()
@@ -499,7 +498,7 @@ namespace FixedEngine.Math
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Fixed<TInt, TFrac> CopySign(Fixed<TInt, TFrac> value, Fixed<TInt, TFrac> sign)
-            => (sign.Raw < 0) ? Neg(Abs(value)) : Abs(value);
+            => sign.Raw < 0 ? Neg(Abs(value)) : Abs(value);
 
         #endregion
 
@@ -522,18 +521,18 @@ namespace FixedEngine.Math
             int raw = x.Raw;
             if ((raw & mask) == 0)
                 return new Fixed<TInt, TFrac>(raw);
-            int fracAdd = (raw >= 0) ? ((1 << FracBitsConst) - (raw & mask)) : 0;
-            return new Fixed<TInt, TFrac>((raw + fracAdd) & ~mask);
+            int fracAdd = raw >= 0 ? (1 << FracBitsConst) - (raw & mask) : 0;
+            return new Fixed<TInt, TFrac>(raw + fracAdd & ~mask);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static Fixed<TInt, TFrac> Round(Fixed<TInt, TFrac> x)
         {
-            int half = 1 << (FracBitsConst - 1);
+            int half = 1 << FracBitsConst - 1;
             int raw = x.Raw;
             int rounded = raw >= 0
-                ? (raw + half) & ~((1 << FracBitsConst) - 1)
-                : (raw - half) & ~((1 << FracBitsConst) - 1);
+                ? raw + half & ~((1 << FracBitsConst) - 1)
+                : raw - half & ~((1 << FracBitsConst) - 1);
             return new Fixed<TInt, TFrac>(rounded);
         }
 
@@ -576,7 +575,7 @@ namespace FixedEngine.Math
         public static Fixed<TInt, TFrac> MulSat(Fixed<TInt, TFrac> a, Fixed<TInt, TFrac> b)
         {
 
-            long prod = ((long)a.Raw * b.Raw) >> FracBitsConst;
+            long prod = (long)a.Raw * b.Raw >> FracBitsConst;
 
             prod = prod > MaxConst ? MaxConst : prod;   // min(prod, MaxConst)
             prod = prod < MinConst ? MinConst : prod;   // max(prod, MinConst)
@@ -593,8 +592,8 @@ namespace FixedEngine.Math
             int v = val.Raw;
 
             // Deux CMOV : max(v, min) puis min(..., max) — aucune branche
-            v = (v < min.Raw) ? min.Raw : v;
-            v = (v > max.Raw) ? max.Raw : v;
+            v = v < min.Raw ? min.Raw : v;
+            v = v > max.Raw ? max.Raw : v;
 
             return new Fixed<TInt, TFrac>(v);   // valeur déjà dans la plage, pas de re‑masque
         }
@@ -606,8 +605,8 @@ namespace FixedEngine.Math
             int one = 1 << FracBitsConst;    // représentation de 1.0 en Q‑format
 
             // max(v, 0) puis min(..., 1)   — RyuJIT ⇒ deux CMOV, zéro saut
-            v = (v < 0) ? 0 : v;
-            v = (v > one) ? one : v;
+            v = v < 0 ? 0 : v;
+            v = v > one ? one : v;
 
             return new Fixed<TInt, TFrac>(v);   // ctor : valeur déjà correcte
         }
@@ -622,10 +621,10 @@ namespace FixedEngine.Math
         {
 
             int vLo = min.Raw + offsetMin;
-            vLo = vLo < MinConst ? MinConst : (vLo > MaxConst ? MaxConst : vLo);
+            vLo = vLo < MinConst ? MinConst : vLo > MaxConst ? MaxConst : vLo;
 
             int vHi = max.Raw + offsetMax;
-            vHi = vHi < MinConst ? MinConst : (vHi > MaxConst ? MaxConst : vHi);
+            vHi = vHi < MinConst ? MinConst : vHi > MaxConst ? MaxConst : vHi;
 
          
             if (vLo > vHi)
@@ -637,8 +636,8 @@ namespace FixedEngine.Math
 
 
             int v = val.Raw;
-            v = (v < vLo) ? vLo : v;   // max(v, vLo)
-            v = (v > vHi) ? vHi : v;   // min(v, vHi)
+            v = v < vLo ? vLo : v;   // max(v, vLo)
+            v = v > vHi ? vHi : v;   // min(v, vHi)
 
             return new Fixed<TInt, TFrac>(v);      // valeur déjà dans la plage
         }
@@ -698,7 +697,7 @@ namespace FixedEngine.Math
             for (int i = 0; i < IntBitsConst; i++)
             {
                 r <<= 1;
-                r |= (v & 1);
+                r |= v & 1;
                 v >>= 1;
             }
             return new Fixed<TInt, TFrac>((int)r);
@@ -730,7 +729,7 @@ namespace FixedEngine.Math
             int count = 0;
             for (int i = IntBitsConst - 1; i >= 0; i--)
             {
-                if ((v & (1u << i)) == 0)
+                if ((v & 1u << i) == 0)
                     count++;
                 else
                     break;
@@ -745,7 +744,7 @@ namespace FixedEngine.Math
             int count = 0;
             for (int i = 0; i < IntBitsConst; i++)
             {
-                if ((v & (1u << i)) == 0)
+                if ((v & 1u << i) == 0)
                     count++;
                 else
                     break;
@@ -760,13 +759,13 @@ namespace FixedEngine.Math
             uint mask = width == 32 ? 0xFFFF_FFFFu            // masque largeur réelle
                                      : (1u << width) - 1;
 
-            n = ((n % width) + width) % width;                // wrap même pour n négatif
-            uint v = ((uint)a.Raw) & mask;                    // *** on masque AVANT de shifter ***
+            n = (n % width + width) % width;                // wrap même pour n négatif
+            uint v = (uint)a.Raw & mask;                    // *** on masque AVANT de shifter ***
 
-            uint res = ((v << n) | (v >> (width - n))) & mask;
+            uint res = (v << n | v >> width - n) & mask;
 
             // wrap signé sur width bits
-            int signed = (int)((res << (32 - width)) >> (32 - width));
+            int signed = (int)(res << 32 - width >> 32 - width);
 
             return new Fixed<TInt, TFrac>(signed);
         }
@@ -777,11 +776,11 @@ namespace FixedEngine.Math
             int width = IntBitsConst;
             uint mask = width == 32 ? 0xFFFF_FFFFu : (1u << width) - 1;
 
-            n = ((n % width) + width) % width;
-            uint v = ((uint)a.Raw) & mask;                    // masque avant rotation
+            n = (n % width + width) % width;
+            uint v = (uint)a.Raw & mask;                    // masque avant rotation
 
-            uint res = ((v >> n) | (v << (width - n))) & mask;
-            int signed = (int)((res << (32 - width)) >> (32 - width));
+            uint res = (v >> n | v << width - n) & mask;
+            int signed = (int)(res << 32 - width >> 32 - width);
 
             return new Fixed<TInt, TFrac>(signed);
         }
@@ -791,7 +790,7 @@ namespace FixedEngine.Math
         {
             uint v = (uint)a.Raw;
             for (int i = IntBitsConst - 1; i >= 0; i--)
-                if ((v & (1u << i)) != 0)
+                if ((v & 1u << i) != 0)
                     return i;
             return -1; // Aucun bit à 1
         }
@@ -801,7 +800,7 @@ namespace FixedEngine.Math
         {
             uint v = (uint)a.Raw;
             for (int i = 0; i < IntBitsConst; i++)
-                if ((v & (1u << i)) != 0)
+                if ((v & 1u << i) != 0)
                     return i;
             return -1; // Aucun bit à 1
         }
@@ -833,7 +832,7 @@ namespace FixedEngine.Math
         /// <summary>
         /// Valeur moitié (0.5)
         /// </summary>
-        public static Fixed<TInt, TFrac> Half => new Fixed<TInt, TFrac>(1 << (FracBitsConst - 1));
+        public static Fixed<TInt, TFrac> Half => new Fixed<TInt, TFrac>(1 << FracBitsConst - 1);
 
         /// <summary>
         /// Tous les bits à 1 (utile pour du debug ou du masking, -1 en signed)
@@ -890,7 +889,7 @@ namespace FixedEngine.Math
             int byteCount = (IntBitsConst + 7) / 8;
             if (n < 0 || n >= byteCount)
                 throw new ArgumentOutOfRangeException(nameof(n), $"n doit être entre 0 et {byteCount - 1} pour Fixed<{typeof(TInt).Name}>");
-            return (byte)((a.Raw >> (n * 8)) & 0xFF);
+            return (byte)(a.Raw >> n * 8 & 0xFF);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -898,7 +897,7 @@ namespace FixedEngine.Math
         {
             int byteCount = (IntBitsConst + 7) / 8;
             byte[] bytes = new byte[byteCount];
-            uint v = (uint)this.Raw;
+            uint v = (uint)Raw;
             for (int i = 0; i < byteCount; i++)
             {
                 bytes[i] = (byte)(v & 0xFF);
@@ -921,7 +920,7 @@ namespace FixedEngine.Math
 
             uint v = 0;
             for (int i = 0; i < byteCount; i++)
-                v |= (uint)bytes[i] << (8 * i);
+                v |= (uint)bytes[i] << 8 * i;
 
             return new Fixed<TInt, TFrac>((int)v);
         }
@@ -932,7 +931,7 @@ namespace FixedEngine.Math
             int byteCount = (IntBitsConst + 7) / 8;
             if (index < 0 || index >= byteCount)
                 throw new ArgumentOutOfRangeException(nameof(index), $"index doit être entre 0 et {byteCount - 1} pour Fixed<{typeof(TInt).Name}>");
-            return (byte)((this.Raw >> (index * 8)) & 0xFF);
+            return (byte)(Raw >> index * 8 & 0xFF);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -941,8 +940,8 @@ namespace FixedEngine.Math
             int byteCount = (IntBitsConst + 7) / 8;
             if (n < 0 || n >= byteCount)
                 throw new ArgumentOutOfRangeException(nameof(n), $"Octet n doit être dans [0,{byteCount - 1}] pour Fixed<{typeof(TInt).Name}>");
-            int mask = ~(0xFF << (n * 8));
-            int v = (this.Raw & mask) | (b << (n * 8));
+            int mask = ~(0xFF << n * 8);
+            int v = Raw & mask | b << n * 8;
             return new Fixed<TInt, TFrac>(v);
         }
 
@@ -989,7 +988,7 @@ namespace FixedEngine.Math
             int bits = IntBitsConst;
             uint uval = (uint)_raw.Raw & Mask.MASKS[bits];
             string bin = Convert.ToString(uval, 2).PadLeft(bits, '0');
-            string hex = uval.ToString("X" + ((bits + 3) / 4));
+            string hex = uval.ToString("X" + (bits + 3) / 4);
             return $"Fixed<{typeof(TInt).Name}, {typeof(TFrac).Name}>({_raw.Raw}) [bin={bin} hex={hex}]";
         }
 
@@ -997,7 +996,7 @@ namespace FixedEngine.Math
         public string ToBinaryString()
         {
             int bits = IntBitsConst; // par exemple 16 pour B16
-            uint v = (uint)this.Raw & ((1u << bits) - 1); // mask sur la vraie largeur
+            uint v = (uint)Raw & (1u << bits) - 1; // mask sur la vraie largeur
             return Convert.ToString(v, 2).PadLeft(bits, '0');
         }
 
@@ -1007,7 +1006,7 @@ namespace FixedEngine.Math
             int bits = IntBitsConst;
             int byteCount = (bits + 7) / 8;
             uint mask = (1u << bits) - 1;
-            uint v = (uint)this.Raw & mask;
+            uint v = (uint)Raw & mask;
             string hex = v.ToString($"X{byteCount * 2}");
             return withPrefix ? $"0x{hex}" : hex;
         }
@@ -1172,34 +1171,75 @@ namespace FixedEngine.Math
          * ToJsonWithMeta
          * FromJsonWithMeta
          ==================================*/
-        #region --- SERIALISATION META (exhaustif, multi-N, erreurs) ---
-
+        #region --- SERIALISATION META ---
         public string ToJsonWithMeta()
-            => $"{{ \"intBits\": {BitsOf<TInt>.Value}, \"fracBits\": {BitsOf<TFrac>.Value}, \"raw\": {Raw} }}";
+        {
+            return $"{{\"intBits\":{BitsOf<TInt>.Value},\"fracBits\":{BitsOf<TFrac>.Value},\"raw\":{Raw}}}";
+        }
 
         public static Fixed<TA, TB> FromJsonWithMeta<TA, TB>(string json)
             where TA : struct
             where TB : struct
         {
-            try
-            {
-                var obj = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
-                int intBits = Convert.ToInt32(obj["intBits"]);
-                int fracBits = Convert.ToInt32(obj["fracBits"]);
-                if (intBits != BitsOf<TA>.Value)
-                    throw new Exception($"Meta-intBits ({intBits}) ne correspond pas au type générique {typeof(TA).Name} ({BitsOf<TA>.Value})");
-                if (fracBits != BitsOf<TB>.Value)
-                    throw new Exception($"Meta-fracBits ({fracBits}) ne correspond pas au type générique {typeof(TB).Name} ({BitsOf<TB>.Value})");
-                int raw = Convert.ToInt32(obj["raw"]);
-                return Fixed<TA, TB>.FromRaw(raw);
-            }
-            catch (Exception ex)
-            {
-                // Tu peux logguer ex.Message si besoin (pour debug)
-                throw new FormatException("Erreur lors du parsing JSON meta pour Fixed.", ex);
-            }
+            if (json == null)
+                throw new FormatException("JSON meta cannot be null.");
+
+            // 1. Recherche rapide des trois champs attendus
+            //    Format attendu : {"intBits":XX,"fracBits":YY,"raw":ZZ}
+            int intBitsPos = json.IndexOf("\"intBits\":", StringComparison.Ordinal);
+            int fracBitsPos = json.IndexOf("\"fracBits\":", StringComparison.Ordinal);
+            int rawPos = json.IndexOf("\"raw\":", StringComparison.Ordinal);
+            if (intBitsPos < 0 || fracBitsPos < 0 || rawPos < 0)
+                throw new FormatException("JSON meta invalide : champs 'intBits', 'fracBits' ou 'raw' manquants.");
+
+            // 2. Extraction des valeurs (sans créer de sous-chaînes)
+            int intBits = ParseIntAfterColon(json, intBitsPos + 10);   // après "intBits":
+            int fracBits = ParseIntAfterColon(json, fracBitsPos + 11);  // après "fracBits":
+            int raw = ParseIntAfterColon(json, rawPos + 6);        // après "raw":
+
+            // 3. Validation des bits
+            if (intBits != BitsOf<TA>.Value)
+                throw new FormatException(
+                    $"Meta-intBits ({intBits}) ≠ type générique {typeof(TA).Name} ({BitsOf<TA>.Value})");
+            if (fracBits != BitsOf<TB>.Value)
+                throw new FormatException(
+                    $"Meta-fracBits ({fracBits}) ≠ type générique {typeof(TB).Name} ({BitsOf<TB>.Value})");
+
+            return Fixed<TA, TB>.FromRaw(raw);
         }
 
+        /* ---------- Helper int (bits/raw) ---------- */
+        private static int ParseIntAfterColon(string s, int start)
+        {
+            int i = start;
+            while (i < s.Length && char.IsWhiteSpace(s[i])) i++;
+
+            int sign = 1;
+            if (i < s.Length && s[i] == '-')
+            {
+                sign = -1; i++;
+                while (i < s.Length && char.IsWhiteSpace(s[i])) i++;
+            }
+            else if (i < s.Length && s[i] == '+')
+            {
+                i++;
+                while (i < s.Length && char.IsWhiteSpace(s[i])) i++;
+            }
+
+            if (i >= s.Length || !char.IsDigit(s[i]))
+                throw new FormatException("Aucun chiffre trouvé après le champ.");
+
+            int value = 0;
+            while (i < s.Length && char.IsDigit(s[i]))
+            {
+                int d = s[i] - '0';
+                if (value > (int.MaxValue - d) / 10)
+                    throw new FormatException("Valeur numérique trop grande.");
+                value = value * 10 + d;
+                i++;
+            }
+            return value * sign;
+        }
         #endregion
 
 

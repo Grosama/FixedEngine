@@ -1,4 +1,5 @@
-﻿using FixedEngine.Math;
+﻿using FixedEngine.Core;
+using FixedEngine.Math;
 using System;
 using System.Linq;
 public struct Rect<TInt, TFrac>
