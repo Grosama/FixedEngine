@@ -1,7 +1,9 @@
 ﻿using FixedEngine.Core;
 using FixedEngine.LUT;
 using System;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Runtime.Versioning;
 
 namespace FixedEngine.Math
 {
@@ -25,6 +27,101 @@ namespace FixedEngine.Math
             long result = (a * (long)t3 + b * (long)t2 + c * (long)t + ((long)d << 16)) >> 16;
             return (int)result;
         }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static int BezierSin(int y0, int y1, int y2, int y3, int tQ16)
+        {
+            // K = tension (0.0 .. 1.0)
+            const int K_Q16 = (int)(0.85 * 65536); // K = 0.85
+
+            // Compute control points C1, C2
+            int d1 = y2 - y0;
+            int d2 = y3 - y1;
+
+            // (K/6) in Q16 is K_Q16 / 6
+            int k6 = K_Q16 / 6;
+
+            int C1 = y1 + (int)(((long)d1 * k6) >> 16);
+            int C2 = y2 - (int)(((long)d2 * k6) >> 16);
+
+            int t = tQ16;
+            int inv = 65536 - t;
+
+            long inv2 = (long)inv * inv >> 16;
+            long inv3 = inv2 * inv >> 16;
+
+            long t2 = (long)t * t >> 16;
+            long t3 = t2 * t >> 16;
+
+            long term1 = inv3 * y1 >> 16;
+            long term2 = 3 * ((inv2 * t) >> 16) * C1 >> 16;
+            long term3 = 3 * ((inv * t2) >> 16) * C2 >> 16;
+            long term4 = t3 * y2 >> 16;
+
+            return (int)(term1 + term2 + term3 + term4);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        static int CatmullAdaptiveQ16(int p0, int p1, int p2, int p3, int tQ16, int quadrant)
+        {
+            // tension T = 1.0 pour Q0,Q3 (Catmull standard),
+            // tension T = 0.70 pour Q1,Q2 (zones délicates)
+            // On simule tension en réduisant les tangentes
+            const int T_std_Q16 = 65536;         // 1.0
+            const int T_soft_Q16 = (int)(0.70 * 65536);
+
+            int T = ((quadrant & 1) == 0) ? T_std_Q16 : T_soft_Q16;
+
+            // Tangentes atténuées : m1 = 0.5*(p2 - p0)*T ; m2 = 0.5*(p3 - p1)*T
+            long m1 = ((long)(p2 - p0) * T) >> 17;  // >>17 = /2 puis /65536
+            long m2 = ((long)(p3 - p1) * T) >> 17;
+
+            int t = tQ16;
+            int t2 = (t * t) >> 16;
+            int t3 = (t2 * t) >> 16;
+
+            // Hermite:
+            // h = (2t³ - 3t² + 1)*p1 + (t³ - 2t² + t)*m1 + (-2t³ + 3t²)*p2 + (t³ - t²)*m2
+            long h1 = ((2L * t3 - 3L * t2 + 65536L) * p1) >> 16;
+            long h2 = ((t3 - 2L * t2 + t) * m1) >> 16;
+            long h3 = ((-2L * t3 + 3L * t2) * p2) >> 16;
+            long h4 = ((t3 - t2) * m2) >> 16;
+
+            return (int)(h1 + h2 + h3 + h4);
+        }
+
+
+        /*[MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int CatmullUniformQ16(int y0, int y1, int y2, int y3, int fracQ16)
+        {
+            // Catmull-Rom standard (paramétrisation uniforme) en Q16.16
+            long a0 = (-y0 + 3L * y1 - 3L * y2 + y3) >> 1;
+            long a1 = (2L * y0 - 5L * y1 + 4L * y2 - y3) >> 1;
+            long a2 = (y2 - y0) >> 1;
+            long a3 = y1;
+
+            long t = fracQ16;
+            long t2 = (t * t) >> 16;
+            long t3 = (t2 * t) >> 16;
+
+            long r = (a0 * t3 + a1 * t2 + a2 * t + (a3 << 16)) >> 16;
+            return (int)r;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int CatmullMonotoneQ16(int y0, int y1, int y2, int y3, int fracQ16)
+        {
+            int v = CatmullUniformQ16(y0, y1, y2, y3, fracQ16);
+
+            // clamp pour éviter les overshoots entre y1 et y2
+            int lo = y1 < y2 ? y1 : y2;
+            int hi = y1 > y2 ? y1 : y2;
+
+            if (v < lo) v = lo;
+            else if (v > hi) v = hi;
+
+            return v;
+        }*/
         #endregion
 
         // ==========================
@@ -44,6 +141,7 @@ namespace FixedEngine.Math
             uint phaseMask = (phaseBits == 0) ? 0u : (1u << phaseBits) - 1u;
             uint phase = uraw & phaseMask;
 
+            // Quadrant sur les 2 bits de poids fort
             int quadrant = (int)(uraw >> (bits - 2)) & 0b11;
             int sign = ((quadrant & 0b10) == 0) ? 1 : -1;
 
@@ -91,7 +189,7 @@ namespace FixedEngine.Math
             // Interpolation
             int q16_16 = (fracBits <= 0)
                 ? sign * lut[lutIdx]
-                : sign * FixedMath.CatmullRom(lut[p0], lut[p1], lut[p2], lut[p3], tQ16);
+                : sign * CatmullAdaptiveQ16(lut[p0], lut[p1], lut[p2], lut[p3], tQ16, quadrant);
 
             return Q16_16ToBn(q16_16, bits);
         }
@@ -220,16 +318,36 @@ namespace FixedEngine.Math
         #region --- COS (UFixed) ---
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int Cos<TUInt, TFrac>(UFixed<TUInt, TFrac> angle)
-            where TUInt : struct where TFrac : struct
-            => Cos((UIntN<TUInt>)angle);
+            where TUInt : struct 
+            where TFrac : struct
+        {
+
+            int bits = UIntN<TUInt>.BitsConst;
+            if (bits < 2)
+                throw new NotSupportedException($"FixedMath.Cos LUT n'est pas défini pour Bn={bits} en unsigned (min = B2).");
+
+            return CosCore(angle.Raw, bits);
+        }
+
 
         #endregion
 
         #region --- COS (Fixed) ---
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int Cos<TInt, TFrac>(Fixed<TInt, TFrac> angle)
-            where TInt : struct where TFrac : struct
-            => Cos((IntN<TInt>)angle);
+            where TInt : struct 
+            where TFrac : struct
+        {
+
+            int bits = IntN<TInt>.BitsConst;
+            int raw = angle.Raw;
+            if (bits < 2 || bits > 31)
+                throw new NotSupportedException($"FixedMath.Cos LUT n'est pas défini pour Bn={bits} en signed (B2..B31).");
+
+            uint uraw = (uint)raw & ((1u << bits) - 1); // wrap signed → unsigned
+            return CosCore(uraw, bits);
+        }
+
         #endregion
 
         //----- TAN -----
@@ -344,7 +462,8 @@ namespace FixedEngine.Math
                 throw new NotSupportedException(
                     $"FixedMath.Tan n'est pas défini pour Bn={bits} (min: B2).");
 
-            uint uraw = (uint)angle.Raw & ((1u << bits) - 1);
+            //uint uraw = (uint)angle.Raw & ((1u << bits) - 1);
+            uint uraw = (uint)angle.Raw &  (MaskQ<TBits>() - 1);
             return Q16_16ToBn(TanCore(uraw, bits), bits);
         }
         #endregion
@@ -352,15 +471,35 @@ namespace FixedEngine.Math
         #region --- TAN (UFixed) ---
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int Tan<TUInt, TFrac>(UFixed<TUInt, TFrac> angle)
-            where TUInt : struct where TFrac : struct
-            => Tan((UIntN<TUInt>)angle);
+            where TUInt : struct 
+            where TFrac : struct
+        {
+
+            int bits = UIntN<TUInt>.BitsConst;
+            if (bits < 2)
+                throw new NotSupportedException(
+                    $"FixedMath.Tan n'est pas défini pour Bn={bits} (min: B2).");
+
+            return Q16_16ToBn(TanCore(angle.Raw, bits), bits);
+        } 
         #endregion
 
         #region --- TAN (Fixed) ---
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int Tan<TInt, TFrac>(Fixed<TInt, TFrac> angle)
-            where TInt : struct where TFrac : struct
-            => Tan((IntN<TInt>)angle);
+            where TInt : struct 
+            where TFrac : struct
+        {
+            int bits = IntN<TInt>.BitsConst;
+            if (bits < 2)
+                throw new NotSupportedException(
+                    $"FixedMath.Tan n'est pas défini pour Bn={bits} (min: B2).");
+
+            //uint uraw = (uint)angle.Raw & ((1u << bits) - 1);
+            uint uraw = (uint)angle.Raw & (MaskQ<TInt>() - 1);
+            return Q16_16ToBn(TanCore(uraw, bits), bits);
+
+        }
         #endregion
 
         #endregion
@@ -422,21 +561,21 @@ namespace FixedEngine.Math
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int SinRaw<TBits>(UIntN<TBits> angle) where TBits : struct
+        public static int SinRawDebug<TBits>(UIntN<TBits> angle) where TBits : struct
         {
             int bits = UIntN<TBits>.BitsConst;
             return SinRawCore(angle.Raw, bits);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int SinRaw<TBits>(IntN<TBits> angle) where TBits : struct
+        public static int SinRawDebug<TBits>(IntN<TBits> angle) where TBits : struct
         {
             int bits = IntN<TBits>.BitsConst;
             return SinRawCore((uint)angle.Raw, bits);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int SinRaw<TBits, TFrac>(UFixed<TBits, TFrac> angle)
+        public static int SinRawDebug<TBits, TFrac>(UFixed<TBits, TFrac> angle)
             where TBits : struct
             where TFrac : struct
         {
@@ -445,16 +584,13 @@ namespace FixedEngine.Math
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int SinRaw<TBits, TFrac>(Fixed<TBits, TFrac> angle) 
+        public static int SinRawDebug<TBits, TFrac>(Fixed<TBits, TFrac> angle) 
             where TBits : struct 
             where TFrac : struct
         {
             int bits = IntN<TBits>.BitsConst;
             return SinRawCore((uint)angle.Raw, bits);
         }
-
-
-
 
         // ----- COS -----
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -466,14 +602,14 @@ namespace FixedEngine.Math
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int CosRaw<TBits>(UIntN<TBits> angle) where TBits : struct
+        public static int CosRawDebug<TBits>(UIntN<TBits> angle) where TBits : struct
         {
             int bits = UIntN<TBits>.BitsConst;
             return CosRawCore(angle.Raw, bits);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int CosRaw<TBits>(IntN<TBits> angle) where TBits : struct
+        public static int CosRawDebug<TBits>(IntN<TBits> angle) where TBits : struct
         {
             int bits = IntN<TBits>.BitsConst;
             return CosRawCore((uint)angle.Raw, bits); // wrap signé → unsigned
@@ -486,17 +622,17 @@ namespace FixedEngine.Math
             => TanCore(raw, bits);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int TanRaw<TBits>(UIntN<TBits> angle)
+        public static int TanRawDebug<TBits>(UIntN<TBits> angle)
         where TBits : struct
             => TanRawCore(angle.Raw, UIntN<TBits>.BitsConst);
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int TanRaw<TBits>(IntN<TBits> angle)
+        public static int TanRawDebug<TBits>(IntN<TBits> angle)
         where TBits : struct
         {
             int bits = IntN<TBits>.BitsConst;
             if (bits < 2 || bits > 31)
-                throw new NotSupportedException($"TanRaw<IntN> : B2..B31 requis (bits={bits}).");
+                throw new NotSupportedException($"TanRawDebug<IntN> : B2..B31 requis (bits={bits}).");
 
             // wrap signé → unsigned sur N bits (évite toute pollution de quadrant)
             uint uraw = (uint)angle.Raw & ((1u << bits) - 1);

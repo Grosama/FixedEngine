@@ -1,4 +1,5 @@
-﻿using FixedEngine.LUT;
+﻿using FixedEngine.Core;
+using FixedEngine.LUT;
 using FixedEngine.Math.Consts;
 
 namespace FixedEngine.Math

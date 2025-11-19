@@ -109,7 +109,7 @@ namespace FixedEngine.Math
         }
 
 
-        // ===== ASIN TAIL EVAL (x ∈ [sin(75°), 1.0], Q16.16) =====
+        // ===== ASIN TAIL EVAL =====
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int AsinTailEval_Q16(int xQ16)
         {
@@ -123,12 +123,12 @@ namespace FixedEngine.Math
             if (xQ16 <= X0) return V[PAD + 0];
             if (xQ16 >= X1) return V[PAD + (N - 1)];
 
-            // u = (x - X0) / (X1 - X0) en Q16 — ARRONDI
+
             int range = X1 - X0;
             long num = ((long)xQ16 - X0) << QF;
             int uQ16 = (int)((num + (range >> 1)) / range);
 
-            // pos = u * (N-1)
+
             long posQ16 = (long)uQ16 * (N - 1);
             int idx = (int)(posQ16 >> QF);      // 0..N-2
             int tQ16 = (int)(posQ16 & 0xFFFF);   // 0..65535
@@ -139,45 +139,27 @@ namespace FixedEngine.Math
             int p2 = V[baseIdx + 1];
             int p3 = V[baseIdx + 2];
             return CatmullRom(p0, p1, p2, p3, tQ16);
-            /*int y = CatmullRom(p0, p1, p2, p3, tQ16);
-            int lo = p1 < p2 ? p1 : p2, hi = p1 > p2 ? p1 : p2;
-            if (y < lo) y = lo;
-            if (y > hi) y = hi;
-            return y;*/
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int Q16_16AngleToBn(int q16_16, int bits, bool signed)
+        public static int Q16_16AngleToBn(int q16_16, int bits)
         {
-            if (signed)
-            {
-                int max = (1 << (bits - 1)) - 1;         // 127 en B8
-                long num = (long)q16_16 * max;
-                long den = TrigConsts.PI_2_Q[16];         // π/2 en Q16
-                int result = (int)((num + (den >> 1)) / den);  // arrondi au plus proche
+            int max = (1 << (bits - 1)) - 1;         // 127 en B8
+            long num = (long)q16_16 * max;
+            long den = TrigConsts.PI_2_Q[16];         
+            int result = (int)((num + (den >> 1)) / den);  // arrondi au plus proche
 
-                // bornes [-max..+max]
-                if (result < -max) result = -max;
-                if (result > max) result = max;
-                return result;
-            }
-            else
-            {
-                int max = (1 << bits) - 1;
-                long num = (long)(q16_16 + TrigConsts.PI_2_Q[16]) * max; // shift to [0..π]
-                long den = TrigConsts.PI_Q[16];
-                int result = (int)((num + (den >> 1)) / den);
-                if (result < 0) result = 0;
-                if (result > max) result = max;
-                return result;
-            }
+            // bornes [-max..+max]
+            if (result < -max) result = -max;
+            if (result > max) result = max;
+            return result;
 
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int Q16_16AngleToBn_Atan2(int q16_16, int bits, bool signed)
         {
-            // q16_16 ∈ [-π .. +π], mais on veut [0 .. 2π) pour le mapping plein cercle.
+
             int twoPi = TrigConsts.PI2_Q[16];
             int pi = TrigConsts.PI_Q[16];
 
@@ -260,7 +242,7 @@ namespace FixedEngine.Math
 
             int acosQ16 = AcosLutCore(valQ16, bits);
             int asinQ16 = TrigConsts.PI_2_Q[16] - acosQ16;
-            return Q16_16AngleToBn(asinQ16, bits, signed: true);
+            return Q16_16AngleToBn(asinQ16, bits);
         }
         #endregion
 
@@ -315,7 +297,7 @@ namespace FixedEngine.Math
             int asinQ16 = TrigConsts.PI_2_Q[16] - acosQ16;
 
             // angle signé [-π/2..+π/2] -> Bn signé
-            return Q16_16AngleToBn(asinQ16, Abits, signed: true);
+            return Q16_16AngleToBn(asinQ16, Abits);
         }
         #endregion
 
@@ -342,7 +324,7 @@ namespace FixedEngine.Math
             int asinQ16 = TrigConsts.PI_2_Q[16] - acosQ16;
 
             // angle signé [-pi/2..+pi/2] -> Bn signé
-            return Q16_16AngleToBn(asinQ16, Abits, signed: true);
+            return Q16_16AngleToBn(asinQ16, Abits);
         }
         #endregion
 

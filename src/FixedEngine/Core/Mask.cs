@@ -1,5 +1,5 @@
 ﻿// Mask.cs : Masques binaires pré-calculés pour FixedEngine
-namespace FixedEngine.Math
+namespace FixedEngine.Core
 {
     public static class Mask
     {
@@ -115,7 +115,7 @@ namespace FixedEngine.Math
             var signBit = SIGN_BITS[bits];
             var ext = SignExtendMask(bits);
             if (((uint)value & signBit) != 0)
-                return (int)(((uint)value) | ext);
+                return (int)((uint)value | ext);
             else
                 return value;
         }

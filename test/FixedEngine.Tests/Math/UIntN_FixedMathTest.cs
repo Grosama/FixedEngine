@@ -21,17 +21,17 @@ namespace FixedEngine.Tests.Math
         [Category("FixedMath/UIntN")]
         public void Sin_UIntN_B2toB32_BitFaithful()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly; // B1 n'est pas forcément défini, mais on tente
+            var asm = typeof(FixedEngine.Core.B2).Assembly; // B1 n'est pas forcément défini, mais on tente
             int lutBits = 12;
             int lutMask = (1 << lutBits) - 1;
             var lut = SinLUT4096.LUT;
 
             for (int bits = 2; bits <= 32; bits++)
             {
-                var tagType = asm.GetType($"FixedEngine.Math.B{bits}");
+                var tagType = asm.GetType($"FixedEngine.Core.B{bits}");
                 if (tagType == null)
                 {
-                    System.Console.WriteLine($"Type FixedEngine.Math.B{bits} absent : SKIP");
+                    System.Console.WriteLine($"Type FixedEngine.Core.B{bits} absent : SKIP");
                     continue;
                 }
                 var angleType = typeof(UIntN<>).MakeGenericType(tagType);
@@ -70,7 +70,7 @@ namespace FixedEngine.Tests.Math
                     var miGen = typeof(FixedMath)
                         .GetMethods()
                         .FirstOrDefault(m =>
-                            m.Name == "SinRaw"
+                            m.Name == "SinRawDebug"
                             && m.IsGenericMethod
                             && m.GetParameters().Length == 1
                             && m.GetParameters()[0].ParameterType.IsGenericType
@@ -92,16 +92,16 @@ namespace FixedEngine.Tests.Math
         [Category("FixedMath/UIntN")]
         public void Sin_UIntN_B2toB32_MaxDiffMeasure()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
             string report = "\nBn\tMaxDiff\tMaxDiffDeg\tMaxDiffValue\tMaxDiffAngleEqDeg";
             var rng = new Random(12345);
 
             for (int bits = 2; bits <= 32; bits++)
             {
-                var tagType = asm.GetType($"FixedEngine.Math.B{bits}");
+                var tagType = asm.GetType($"FixedEngine.Core.B{bits}");
                 if (tagType == null)
                 {
-                    System.Console.WriteLine($"Type FixedEngine.Math.B{bits} absent : SKIP");
+                    System.Console.WriteLine($"Type FixedEngine.Core.B{bits} absent : SKIP");
                     continue;
                 }
                 var angleType = typeof(UIntN<>).MakeGenericType(tagType);
@@ -110,7 +110,7 @@ namespace FixedEngine.Tests.Math
                 var miGen = typeof(FixedMath)
                     .GetMethods()
                     .FirstOrDefault(m =>
-                        m.Name == "SinRaw"
+                        m.Name == "SinRawDebug"
                         && m.IsGenericMethod
                         && m.GetParameters().Length == 1
                         && m.GetParameters()[0].ParameterType.IsGenericType
@@ -190,7 +190,7 @@ namespace FixedEngine.Tests.Math
         [Category("FixedMath/UIntN")]
         public void Sin_UIntN_B2toB32_VsMathSin()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
             string report = "\nBn\tMaxDiffInt\tMaxDiffNorm\tAtDeg\tRaw\tVal\tExp";
             var rng = new Random(12345);
 
@@ -209,10 +209,10 @@ namespace FixedEngine.Tests.Math
 
             for (int bits = 2; bits <= 32; bits++)
             {
-                var tagType = asm.GetType($"FixedEngine.Math.B{bits}");
+                var tagType = asm.GetType($"FixedEngine.Core.B{bits}");
                 if (tagType == null)
                 {
-                    Console.WriteLine($"Type FixedEngine.Math.B{bits} absent : SKIP");
+                    Console.WriteLine($"Type FixedEngine.Core.B{bits} absent : SKIP");
                     continue;
                 }
 
@@ -300,14 +300,14 @@ namespace FixedEngine.Tests.Math
         [Category("FixedMath/UIntN")]
         public void Cos_UIntN_B2toB32_BitFaithful()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
             int lutBits = 12;
             int lutMask = (1 << lutBits) - 1;
             var lut = SinLUT4096.LUT;
 
             for (int bits = 2; bits <= 32; bits++)
             {
-                var tagType = asm.GetType($"FixedEngine.Math.B{bits}");
+                var tagType = asm.GetType($"FixedEngine.Core.B{bits}");
                 if (tagType == null) { Console.WriteLine($"Type B{bits} absent : SKIP"); continue; }
 
                 var angleType = typeof(UIntN<>).MakeGenericType(tagType);
@@ -340,7 +340,7 @@ namespace FixedEngine.Tests.Math
                     // -------------------------------------------------------
 
                     var miGen = typeof(FixedMath).GetMethods()
-                                 .First(m => m.Name == "CosRaw"
+                                 .First(m => m.Name == "CosRawDebug"
                                           && m.IsGenericMethod
                                           && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(UIntN<>));
                     var mi = miGen.MakeGenericMethod(tagType);
@@ -359,18 +359,18 @@ namespace FixedEngine.Tests.Math
         [Category("FixedMath/UIntN")]
         public void Cos_UIntN_B2toB32_MaxDiffMeasure()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
             string report = "\nBn\tMaxDiff\tMaxDiffDeg\tMaxDiffValue\tMaxDiffAngleEqDeg";
             var rng = new Random(424242);
 
             for (int bits = 2; bits <= 32; bits++)
             {
-                var tagType = asm.GetType($"FixedEngine.Math.B{bits}");
+                var tagType = asm.GetType($"FixedEngine.Core.B{bits}");
                 if (tagType == null) { Console.WriteLine($"Type B{bits} absent : SKIP"); continue; }
 
                 var angleType = typeof(UIntN<>).MakeGenericType(tagType);
                 var mi = typeof(FixedMath).GetMethods()
-                           .First(m => m.Name == "CosRaw"
+                           .First(m => m.Name == "Cos"
                                     && m.IsGenericMethod
                                     && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(UIntN<>))
                            .MakeGenericMethod(tagType);
@@ -413,14 +413,111 @@ namespace FixedEngine.Tests.Math
             Console.WriteLine(report);
             Assert.Pass(report);
         }
-        #endregion
 
-        #region --- TAN Retro (UIntN) via TanRaw ---
         [Test]
         [Category("FixedMath/UIntN")]
-        public void Tan_UIntN_B2toB32_MaxDiffMeasure_TanRaw()
+        public void Cos_UIntN_B2toB32_VsMathCos()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
+            string report = "\nBn\tMaxDiffInt\tMaxDiffNorm\tAtDeg\tRaw\tVal\tExp";
+            var rng = new Random(67890); // autre seed pour la beauté
+
+            // FixedMath.Cos<TBits>(UIntN<TBits>)
+            var miGen = typeof(FixedMath)
+                .GetMethods()
+                .FirstOrDefault(m =>
+                    m.Name == "Cos"
+                    && m.IsGenericMethod
+                    && m.GetParameters().Length == 1
+                    && m.GetParameters()[0].ParameterType.IsGenericType
+                    && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(UIntN<>));
+
+            if (miGen == null)
+                Assert.Fail("Méthode générique FixedMath.Cos<TBits>(UIntN<TBits>) introuvable.");
+
+            for (int bits = 2; bits <= 32; bits++)
+            {
+                var tagType = asm.GetType($"FixedEngine.Core.B{bits}");
+                if (tagType == null)
+                {
+                    Console.WriteLine($"Type FixedEngine.Core.B{bits} absent : SKIP");
+                    continue;
+                }
+
+                var angleType = typeof(UIntN<>).MakeGenericType(tagType);
+                var mi = miGen.MakeGenericMethod(tagType);
+
+                uint maxRaw = (bits == 32) ? uint.MaxValue : (1u << bits) - 1u;
+                int numSamples = (bits >= 28) ? 1_000_000 : System.Math.Min((int)maxRaw + 1, 1_000_000);
+                if (numSamples <= 0)
+                {
+                    Console.WriteLine($"bits={bits} : numSamples <= 0, skip.");
+                    continue;
+                }
+
+                int maxAmp = (bits == 32)
+                    ? int.MaxValue
+                    : (int)((1u << (bits - 1)) - 1u);
+
+                long maxDiffInt = 0;
+                double maxDiffNorm = 0.0;
+                double atDeg = 0.0;
+                uint rawAtMax = 0;
+                int valAtMax = 0;
+                int expAtMax = 0;
+
+                for (int i = 0; i < numSamples; i++)
+                {
+                    uint raw;
+                    if (bits >= 28)
+                    {
+                        raw = (uint)rng.NextInt64(0, (long)maxRaw + 1);
+                    }
+                    else
+                    {
+                        raw = (uint)(((ulong)maxRaw * (ulong)i) / (ulong)numSamples);
+                    }
+
+                    var angle = Activator.CreateInstance(angleType, raw);
+
+                    int val = (int)mi.Invoke(null, new[] { angle });
+
+                    double radians = ((double)raw / ((double)maxRaw + 1.0)) * 2.0 * System.Math.PI;
+
+                    double c = System.Math.Cos(radians);
+                    int expected = (int)System.Math.Round(c * maxAmp);
+                    if (expected < -maxAmp) expected = -maxAmp;
+                    if (expected > maxAmp) expected = maxAmp;
+
+                    long diffLong = (long)val - (long)expected;
+                    if (diffLong < 0) diffLong = -diffLong;
+
+                    if (diffLong > maxDiffInt)
+                    {
+                        maxDiffInt = diffLong;
+                        maxDiffNorm = (double)diffLong / maxAmp;
+                        atDeg = radians * 180.0 / System.Math.PI;
+                        rawAtMax = raw;
+                        valAtMax = val;
+                        expAtMax = expected;
+                    }
+                }
+
+                report += $"\nB{bits}\t{maxDiffInt}\t{maxDiffNorm:0.000000}\t{atDeg:0.###}\t{rawAtMax}\t{valAtMax}\t{expAtMax}";
+            }
+
+            Console.WriteLine(report);
+            Assert.Pass(report);
+        }
+
+        #endregion
+
+        #region --- TAN Retro (UIntN) ---
+        [Test]
+        [Category("FixedMath/UIntN")]
+        public void Tan_UIntN_B2toB32_MaxDiffMeasure()
+        {
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
 
             string report = "\nBn\tMaxDiff\tMaxDiffDeg\tMaxDiffValue\tMaxDiffAngleEqDeg"
                           + "\t| LinearZone | MaxDiffLin\tMaxDiffLinDeg\tMaxDiffLinValue"
@@ -429,7 +526,7 @@ namespace FixedEngine.Tests.Math
             var rng = new Random(24680);
 
             var miTanRawOpen = typeof(FixedMath).GetMethods()
-                .Where(m => m.Name == "TanRaw" && m.IsGenericMethodDefinition)
+                .Where(m => m.Name == "TanRawDebug" && m.IsGenericMethodDefinition)
                 .First(m =>
                 {
                     var ps = m.GetParameters();
@@ -440,7 +537,7 @@ namespace FixedEngine.Tests.Math
 
             for (int bits = 2; bits <= 32; bits++)
             {
-                var tagType = asm.GetType($"FixedEngine.Math.B{bits}");
+                var tagType = asm.GetType($"FixedEngine.Core.B{bits}");
                 if (tagType == null) { Console.WriteLine($"Type B{bits} absent : SKIP"); continue; }
 
                 var angleType = typeof(UIntN<>).MakeGenericType(tagType);
@@ -476,7 +573,7 @@ namespace FixedEngine.Tests.Math
                     // Construit l'angle UIntN<Bn>
                     var angleObj = Activator.CreateInstance(angleType, raw);
 
-                    // Appel à FixedMath.TanRaw(UIntN<Bn>)
+                    // Appel à FixedMath.TanRawDebug(UIntN<Bn>)
                     int tanVal = (int)miTan.Invoke(null, new[] { angleObj });
 
                     // Skip si sentinelle asymptote renvoyée par TanRawCore
@@ -538,6 +635,105 @@ namespace FixedEngine.Tests.Math
 
                 report += $"\n  ↳ LinError={maxDiffLinValue:0.#####} ≈ {maxDiffAngleEqDegLin:0.##}° at {maxDiffAngleEqDegLinAtDeg:0.##}°"
                         + $" | TotalError={maxDiffValue:0.#####} ≈ {maxDiffAngleEqDeg:0.##}° at {maxDiffDeg:0.##}°";
+            }
+
+            Console.WriteLine(report);
+            Assert.Pass(report);
+        }
+
+        [Test]
+        [Category("FixedMath/UIntN")]
+        public void Tan_UIntN_B2toB32_VsMathTan_FloatError()
+        {
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
+            string report = "\nBn\tMaxDiffFloat\tAvgDiffFloat\tMaxDiffDeg\tAtDeg\tRaw\tVal\tExp";
+            var rng = new Random(12345);
+
+            // FixedMath.Tan<TBits>(UIntN<TBits>)
+            var miGen = typeof(FixedMath)
+                .GetMethods()
+                .FirstOrDefault(m =>
+                    m.Name == "Tan"
+                    && m.IsGenericMethod
+                    && m.GetParameters().Length == 1
+                    && m.GetParameters()[0].ParameterType.IsGenericType
+                    && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(UIntN<>));
+
+            if (miGen == null)
+                Assert.Fail("Méthode générique FixedMath.Tan<TBits>(UIntN<TBits>) introuvable.");
+
+            for (int bits = 2; bits <= 32; bits++)
+            {
+                var tagType = asm.GetType($"FixedEngine.Core.B{bits}");
+                if (tagType == null)
+                {
+                    Console.WriteLine($"Type FixedEngine.Core.B{bits} absent : SKIP");
+                    continue;
+                }
+
+                var angleType = typeof(UIntN<>).MakeGenericType(tagType);
+                var mi = miGen.MakeGenericMethod(tagType);
+
+                uint maxRaw = (bits == 32) ? uint.MaxValue : (1u << bits) - 1u;
+                int numSamples = (bits >= 28) ? 1_000_000 : System.Math.Min((int)maxRaw + 1, 1_000_000);
+                if (numSamples <= 0)
+                {
+                    Console.WriteLine($"bits={bits} : numSamples <= 0, skip.");
+                    continue;
+                }
+
+                double maxDiffFloat = 0.0;
+                double sumDiffFloat = 0.0;
+                int sampleCount = 0;
+                double maxDiffDeg = 0.0;
+                double atDeg = 0.0;
+                uint rawAtMax = 0;
+                int valAtMax = 0;
+                int expAtMax = 0;
+
+                for (int i = 0; i < numSamples; i++)
+                {
+                    uint raw;
+                    if (bits >= 28)
+                    {
+                        raw = (uint)rng.NextInt64(0, (long)maxRaw + 1);
+                    }
+                    else
+                    {
+                        raw = (uint)((maxRaw * (ulong)i) / (ulong)(numSamples - 1));
+                    }
+
+                    var angle = Activator.CreateInstance(angleType, raw);
+                    int valQ16 = (int)mi.Invoke(null, new[] { angle });
+
+                    double radians = (double)raw / ((double)maxRaw + 1.0) * 2.0 * System.Math.PI;
+                    double tanReal = System.Math.Tan(radians);
+
+                    if (System.Math.Abs(System.Math.Cos(radians)) < 1e-7)
+                        continue;
+
+                    double valFloat = valQ16 / 65536.0;
+                    double diffFloat = System.Math.Abs(valFloat - tanReal);
+
+                    sumDiffFloat += diffFloat;
+                    sampleCount++;
+
+                    double deg = radians * 180.0 / System.Math.PI;
+
+                    if (diffFloat > maxDiffFloat)
+                    {
+                        maxDiffFloat = diffFloat;
+                        maxDiffDeg = deg;
+                        atDeg = deg;
+                        rawAtMax = raw;
+                        valAtMax = valQ16;
+                        expAtMax = (int)(tanReal * 65536.0);
+                    }
+                }
+
+                double avgDiffFloat = (sampleCount > 0) ? sumDiffFloat / sampleCount : 0.0;
+
+                report += $"\nB{bits}\t{maxDiffFloat:0.#####}\t{avgDiffFloat:0.#####}\t{maxDiffDeg:0.###}\t{atDeg:0.###}\t{rawAtMax}\t{valAtMax}\t{expAtMax}";
             }
 
             Console.WriteLine(report);
@@ -641,7 +837,7 @@ namespace FixedEngine.Tests.Math
         [Category("FixedMath/UIntN")]
         public void Asin_UIntN_B2toB31_MaxAngleError()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
             string report = "\nBn\tMaxAngleErrDeg\tMaxAngleErrRad\tMaxAngleErrTicks\tAtDeg";
 
             static long Gcd(long a, long b) { while (b != 0) { long t = a % b; a = b; b = t; } return System.Math.Abs(a); }
@@ -659,7 +855,7 @@ namespace FixedEngine.Tests.Math
 
             for (int bits = 2; bits <= 31; bits++)
             {
-                var tagType = asm.GetType($"FixedEngine.Math.B{bits}");
+                var tagType = asm.GetType($"FixedEngine.Core.B{bits}");
                 if (tagType == null) { Console.WriteLine($"Type B{bits} absent : SKIP"); continue; }
 
                 var valType = typeof(UIntN<>).MakeGenericType(tagType);
@@ -718,7 +914,7 @@ namespace FixedEngine.Tests.Math
                     double x = System.Math.Clamp(valQ16 / 65536.0, -1.0, 1.0);
                     double asinRadRef = System.Math.Asin(x);
                     int expectedQ16 = (int)System.Math.Round(asinRadRef * 65536.0);
-                    int expectedBn = FixedMath.Q16_16AngleToBn(expectedQ16, bits, signed: true);
+                    int expectedBn = FixedMath.Q16_16AngleToBn(expectedQ16, bits);
 
                     int diffTicks = System.Math.Abs(asinBn - expectedBn);
                     double diffRad = diffTicks * ticksToRad;
@@ -743,7 +939,7 @@ namespace FixedEngine.Tests.Math
                     double x = System.Math.Clamp(valQ16 / 65536.0, -1.0, 1.0);
                     double asinRadRef = System.Math.Asin(x);
                     int expectedQ16 = (int)System.Math.Round(asinRadRef * 65536.0);
-                    int expectedBn = FixedMath.Q16_16AngleToBn(expectedQ16, bits, signed: true);
+                    int expectedBn = FixedMath.Q16_16AngleToBn(expectedQ16, bits);
 
                     int diffTicks = System.Math.Abs(asinBn - expectedBn);
                     double diffRad = diffTicks * ticksToRad;
@@ -803,7 +999,7 @@ namespace FixedEngine.Tests.Math
         [Category("FixedMath/UIntN")]
         public void Asin_UIntN_B2toB28_MaxUserPerceivedAngleError_PositiveOnly()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
             string report = "\nBn\tMaxErrDeg\tMaxErrRad\tMaxGapDeg\tMaxGapTicks\tAtDeg≈";
 
             // Récupère la MethodInfo du helper défini ci-dessus
@@ -816,7 +1012,7 @@ namespace FixedEngine.Tests.Math
 
             for (int bits = 2; bits <= 28; bits++)
             {
-                var tagType = asm.GetType($"FixedEngine.Math.B{bits}", throwOnError: true);
+                var tagType = asm.GetType($"FixedEngine.Core.B{bits}", throwOnError: true);
                 int maxRaw = (1 << bits) - 1;
                 int domain = maxRaw + 1;
 
@@ -851,7 +1047,7 @@ namespace FixedEngine.Tests.Math
         [Category("FixedMath/UIntN")]
         public void Asin_UIntN_B2toB28_MaxUserPerceivedAngleError_NegativeOnly()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
             string report = "\nBn\tMaxErrDeg\tMaxErrRad\tMaxGapDeg\tMaxGapTicks\tAtDeg≈";
 
             // Même helper que pour le positif : il mesure le max gap sur [a..b]
@@ -864,7 +1060,7 @@ namespace FixedEngine.Tests.Math
 
             for (int bits = 2; bits <= 28; bits++)
             {
-                var tagType = asm.GetType($"FixedEngine.Math.B{bits}", throwOnError: true);
+                var tagType = asm.GetType($"FixedEngine.Core.B{bits}", throwOnError: true);
                 int maxRaw = (1 << bits) - 1;
                 int domain = maxRaw + 1;
 
@@ -899,7 +1095,7 @@ namespace FixedEngine.Tests.Math
         [Category("FixedMath/UIntN")]
         public void Asin_UIntN_B2toB28_MaxError_IncludingAnchors()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
             string report = "\nBn\tMaxErrDeg\tMaxErrRad\tMaxGapDeg\tMaxGapTicks\tAtDeg≈";
 
             // Récupère la MethodInfo du helper défini ci-dessus
@@ -912,7 +1108,7 @@ namespace FixedEngine.Tests.Math
 
             for (int bits = 2; bits <= 28; bits++)
             {
-                var tagType = asm.GetType($"FixedEngine.Math.B{bits}", throwOnError: true);
+                var tagType = asm.GetType($"FixedEngine.Core.B{bits}", throwOnError: true);
                 int maxRaw = (1 << bits) - 1;
                 int domain = maxRaw + 1;
 
@@ -948,7 +1144,7 @@ namespace FixedEngine.Tests.Math
         [Category("FixedMath/UIntN")]
         public void Asin_UIntN_B2toB28_MaxUserPerceivedAngleError_Gap_Fast()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
             string report = "\nBn\tMaxErrDeg\tMaxErrRad\tMaxGapDeg\tMaxGapTicks\tAtDeg≈";
 
             var mPos = typeof(UIntN_FixedMathTest).GetMethod(nameof(MeasureGapPositive_UIntN),
@@ -962,7 +1158,7 @@ namespace FixedEngine.Tests.Math
 
             for (int bits = 2; bits <= 28; bits++)
             {
-                var tagType = asm.GetType($"FixedEngine.Math.B{bits}", throwOnError: true);
+                var tagType = asm.GetType($"FixedEngine.Core.B{bits}", throwOnError: true);
                 int maxRaw = (1 << bits) - 1;
                 int domain = maxRaw + 1;
 
@@ -1002,7 +1198,7 @@ namespace FixedEngine.Tests.Math
         [Category("FixedMath/UIntN")]
         public void Asin_UIntN_B2toB28_MaxUserPerceivedAngleError_Gap_Fast_NoAnchors()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
             string report = "\nBn\tMaxErrDeg\tMaxErrRad\tMaxGapDeg\tMaxGapTicks\tAtDeg≈";
 
             var mPos = typeof(UIntN_FixedMathTest).GetMethod(nameof(MeasureGapPositive_UIntN),
@@ -1016,7 +1212,7 @@ namespace FixedEngine.Tests.Math
 
             for (int bits = 2; bits <= 28; bits++)
             {
-                var tagType = asm.GetType($"FixedEngine.Math.B{bits}", throwOnError: true);
+                var tagType = asm.GetType($"FixedEngine.Core.B{bits}", throwOnError: true);
                 int maxRaw = (1 << bits) - 1;
                 int domain = maxRaw + 1;
 
@@ -1128,6 +1324,103 @@ namespace FixedEngine.Tests.Math
                 }
             }
         }
+
+        [Test]
+        [Category("FixedMath/UIntN")]
+        public void Asin_UIntN_B2toB31_VsMathAsin_FloatError()
+        {
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
+            string report = "\nBn\tMaxDiffFloat\tAvgDiffFloat\tRawAtMax\tValAtMax\tExpAtMax";
+            var rng = new Random(12345);
+
+            // FixedMath.Asin<TBits>(UIntN<TBits>)
+            var miGen = typeof(FixedMath)
+                .GetMethods()
+                .FirstOrDefault(m =>
+                    m.Name == "Asin"
+                    && m.IsGenericMethod
+                    && m.GetParameters().Length == 1
+                    && m.GetParameters()[0].ParameterType.IsGenericType
+                    && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(UIntN<>));
+
+            if (miGen == null)
+                Assert.Fail("Méthode générique FixedMath.Asin<TBits>(UIntN<TBits>) introuvable.");
+
+            for (int bits = 2; bits <= 31; bits++)
+            {
+                var tagType = asm.GetType($"FixedEngine.Core.B{bits}");
+                if (tagType == null)
+                {
+                    Console.WriteLine($"Type FixedEngine.Core.B{bits} absent : SKIP");
+                    continue;
+                }
+
+                var angleType = typeof(UIntN<>).MakeGenericType(tagType);
+                var mi = miGen.MakeGenericMethod(tagType);
+
+                uint maxRaw = (bits == 32) ? uint.MaxValue : (1u << bits) - 1u;
+                int numSamples = (bits >= 28)
+                    ? 1_000_000
+                    : System.Math.Min((int)maxRaw + 1, 1_000_000);
+                if (numSamples <= 0)
+                    continue;
+
+                double maxDiffFloat = 0.0;
+                double sumDiffFloat = 0.0;
+                int sampleCount = 0;
+
+                uint rawAtMax = 0;
+                int valAtMax = 0;
+                int expAtMax = 0;
+
+                for (int i = 0; i < numSamples; i++)
+                {
+                    uint raw;
+                    if (bits >= 28)
+                    {
+                        ulong r = (ulong)rng.NextInt64(0, (long)maxRaw + 1);
+                        raw = (uint)r;
+                    }
+                    else
+                    {
+                        raw = (uint)(((ulong)maxRaw * (ulong)i) / (ulong)(numSamples - 1));
+                    }
+
+                    var angle = Activator.CreateInstance(angleType, raw);
+                    int valQ16 = (int)mi.Invoke(null, new[] { angle });
+
+                    // Convert raw to [0,1] float
+                    double x = (double)raw / (double)maxRaw;
+
+                    // Clamp par sécurité (devrait être inutile)
+                    x = System.Math.Max(0.0, System.Math.Min(1.0, x));
+
+                    double asinReal = System.Math.Asin(x);
+
+                    double valFloat = valQ16 / 65536.0;
+                    double diffFloat = System.Math.Abs(valFloat - asinReal);
+
+                    sumDiffFloat += diffFloat;
+                    sampleCount++;
+
+                    if (diffFloat > maxDiffFloat)
+                    {
+                        maxDiffFloat = diffFloat;
+                        rawAtMax = raw;
+                        valAtMax = valQ16;
+                        expAtMax = (int)(asinReal * 65536.0);
+                    }
+                }
+
+                double avgDiffFloat = (sampleCount > 0) ? sumDiffFloat / sampleCount : 0.0;
+
+                report += $"\nB{bits}\t{maxDiffFloat:0.#####}\t{avgDiffFloat:0.#####}\t{rawAtMax}\t{valAtMax}\t{expAtMax}";
+            }
+
+            Console.WriteLine(report);
+            Assert.Pass(report);
+        }
+
         #endregion
 
         #region --- ACOS LUT Retro (UIntN)
@@ -1135,7 +1428,7 @@ namespace FixedEngine.Tests.Math
         [Category("FixedMath/UIntN")]
         public void Acos_UIntN_B2toB31_MaxAngleError()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
             string report = "\nBn\tMaxAngleErrDeg\tMaxAngleErrRad\tMaxAngleErrTicks\tAtDeg";
 
             static long Gcd(long a, long b) { while (b != 0) { long t = a % b; a = b; b = t; } return System.Math.Abs(a); }
@@ -1152,7 +1445,7 @@ namespace FixedEngine.Tests.Math
 
             for (int bits = 2; bits <= 31; bits++)
             {
-                var tagType = asm.GetType($"FixedEngine.Math.B{bits}");
+                var tagType = asm.GetType($"FixedEngine.Core.B{bits}");
                 if (tagType == null) { Console.WriteLine($"Type B{bits} absent : SKIP"); continue; }
 
                 var valType = typeof(UIntN<>).MakeGenericType(tagType);

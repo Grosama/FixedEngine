@@ -658,18 +658,49 @@ namespace FixedEngine.Core
 
         public static Fixed<TInt, TFrac> Sin(Fixed<TInt, TFrac> angle)
             => new Fixed<TInt, TFrac>(FixedMath.Sin(angle));
+        public static Fixed<TInt, TFrac> Sin(IntN<TInt> angle)
+            => new Fixed<TInt, TFrac>(FixedMath.Sin(angle));
+        public static Fixed<TInt, TFrac> Sin(UIntN<TInt> angle)
+            => new Fixed<TInt, TFrac>(FixedMath.Sin(angle));
+        public static Fixed<TInt, TFrac> Sin(UFixed<TInt, TFrac> angle)
+            => new Fixed<TInt, TFrac>(FixedMath.Sin(angle));
+
+
         public static Fixed<TInt, TFrac> Cos(Fixed<TInt, TFrac> angle)
             => new Fixed<TInt, TFrac>(FixedMath.Cos(angle));
+        public static Fixed<TInt, TFrac> Cos(IntN<TInt> angle)
+            => new Fixed<TInt, TFrac>(FixedMath.Cos(angle));
+        public static Fixed<TInt, TFrac> Cos(UIntN<TInt> angle)
+            => new Fixed<TInt, TFrac>(FixedMath.Cos(angle));
+        public static Fixed<TInt, TFrac> Cos(UFixed<TInt, TFrac> angle)
+            => new Fixed<TInt, TFrac>(FixedMath.Cos(angle));
+
+
         public static Fixed<TInt, TFrac> Tan(Fixed<TInt, TFrac> angle)
             => new Fixed<TInt, TFrac>(FixedMath.Tan(angle));
+        public static Fixed<TInt, TFrac> Tan(IntN<TInt> angle)
+            => new Fixed<TInt, TFrac>(FixedMath.Tan(angle));
+        public static Fixed<TInt, TFrac> Tan(UIntN<TInt> angle)
+            => new Fixed<TInt, TFrac>(FixedMath.Tan(angle));
+        public static Fixed<TInt, TFrac> Tan(UFixed<TInt, TFrac> angle)
+            => new Fixed<TInt, TFrac>(FixedMath.Tan(angle));
+
+
 
         // Fonctions inverses (retournent aussi un Fixed)
         public static Fixed<TInt, TFrac> Asin(Fixed<TInt, TFrac> val)
             => new Fixed<TInt, TFrac>(FixedMath.Asin(val));
+
+
+
         public static Fixed<TInt, TFrac> Acos(Fixed<TInt, TFrac> val)
             => new Fixed<TInt, TFrac>(FixedMath.Acos(val));
+
+
         public static Fixed<TInt, TFrac> Atan(Fixed<TInt, TFrac> val)
             => new Fixed<TInt, TFrac>(FixedMath.Atan(val));
+
+
         public static Fixed<TInt, TFrac> Atan2(Fixed<TInt, TFrac> y, Fixed<TInt, TFrac> x)
             => new Fixed<TInt, TFrac>(FixedMath.Atan2(y, x));
 

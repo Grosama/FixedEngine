@@ -20,84 +20,70 @@ namespace FixedEngine.Tests.Math
         [Category("FixedMath/UFixed")]
         public void Sin_UFixed_B2toB32_BitFaithful()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
             int lutBits = 12;
             int lutMask = (1 << lutBits) - 1;
             var lut = SinLUT4096.LUT;
-
             for (int totalBits = 2; totalBits <= 32; totalBits++)
             {
-                var tagTotal = asm.GetType($"FixedEngine.Math.B{totalBits}");
+                var tagTotal = asm.GetType($"FixedEngine.Core.B{totalBits}");
                 if (tagTotal == null)
                 {
-                    Console.WriteLine($"Type FixedEngine.Math.B{totalBits} absent : SKIP");
+                    System.Console.WriteLine($"Type FixedEngine.Core.B{totalBits} absent : SKIP");
                     continue;
                 }
-
-                // TFrac arbitraire : n'affecte pas le résultat car Sin(UFixed) ne dépend que de TUInt
-                var tagFrac = asm.GetType("FixedEngine.Math.B16") ?? asm.GetType("FixedEngine.Math.B8");
+                var tagFrac = asm.GetType("FixedEngine.Core.B16") ?? asm.GetType("FixedEngine.Core.B8");
                 if (tagFrac == null)
                 {
-                    Console.WriteLine($"Type FixedEngine.Math.B16 ou B8 absent : SKIP");
+                    System.Console.WriteLine($"Type FixedEngine.Core.B16 ou B8 absent : SKIP");
                     continue;
                 }
-
                 var angleType = typeof(UFixed<,>).MakeGenericType(tagTotal, tagFrac);
 
+                uint maxRawU = (1u << totalBits) - 1u;
+                ulong domain = (ulong)maxRawU + 1;
                 int phaseBits = totalBits - 2;
 
-                // Bit-faithful uniquement tant que Bn <= lutBits+2 (comme pour Fixed)
+                // Mode bit-faithful seulement si Bn ≤ lutBits+2 (ici 14)
                 if (totalBits > lutBits + 2)
                 {
-                    Console.WriteLine($"B{totalBits}: au-delà de la zone bit-faithful, skip (interpolation active)");
+                    System.Console.WriteLine($"B{totalBits}: au-delà de la zone bit-faithful, skip (interpolation active)");
                     continue;
                 }
-
-                uint maxRawU = (1u << totalBits) - 1u;
-                ulong domain = (ulong)maxRawU + 1UL;
-
-                // Méthode générique FixedMath.SinRaw<TUInt, TFrac>(UFixed<TUInt, TFrac>)
-                var miGen = typeof(FixedMath)
-                    .GetMethods()
-                    .FirstOrDefault(m =>
-                        m.Name == "SinRaw"
-                        && m.IsGenericMethod
-                        && m.GetParameters().Length == 1
-                        && m.GetParameters()[0].ParameterType.IsGenericType
-                        && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(UFixed<,>));
-
-                if (miGen == null)
-                    Assert.Fail("Méthode générique FixedMath.SinRaw<TUInt, TFrac>(UFixed<TUInt, TFrac>) absente !");
-
-                var mi = miGen.MakeGenericMethod(tagTotal, tagFrac);
-
-                for (uint rawU = 0; rawU <= maxRawU; rawU++)
+                for (uint raw = 0; raw <= maxRawU; raw++)
                 {
-                    int raw = (int)rawU;
                     var angle = Activator.CreateInstance(angleType, raw);
-
-                    uint uraw = rawU & ((1u << totalBits) - 1u);
+                    uint uraw = raw;
                     int phase = (int)(uraw & ((1u << phaseBits) - 1u));
-                    int quadrant = (int)(uraw >> phaseBits) & 0b11;
-
+                    int quadrant = (int)(uraw >> (totalBits - 2)) & 0b11;
                     int sign = (quadrant < 2) ? 1 : -1;
-
                     int idx;
                     if (phaseBits > lutBits)
                         idx = phase >> (phaseBits - lutBits);
                     else
                         idx = phase << (lutBits - phaseBits);
                     idx &= lutMask;
-
-                    int lutIdx = (quadrant == 0 || quadrant == 2) ? idx : (lutMask - idx);
+                    int lutIdx = (quadrant == 0 || quadrant == 2) ? idx : lutMask - idx;
                     int expected = sign * lut[lutIdx];
 
+                    // Appel vrai code prod
+                    var miGen = typeof(FixedMath)
+                        .GetMethods()
+                        .FirstOrDefault(m =>
+                            m.Name == "SinRawDebug"
+                            && m.IsGenericMethod
+                            && m.GetParameters().Length == 1
+                            && m.GetParameters()[0].ParameterType.IsGenericType
+                            && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(UFixed<,>));
+                    if (miGen == null)
+                        Assert.Fail("Méthode générique FixedMath.SinRawDebug<TUInt, TFrac>(UFixed<TUInt, TFrac>) absente !");
+                    var mi = miGen.MakeGenericMethod(tagTotal, tagFrac);
                     int resultInt = (int)mi.Invoke(null, new[] { angle });
+
                     Assert.That(resultInt, Is.EqualTo(expected),
                         $"B{totalBits}, raw={raw}, expected={expected}, got={resultInt}");
                 }
-
-                Console.WriteLine($"B{totalBits} : bit-faithful UNSIGNED validé ({domain} valeurs)");
+                System.Console.WriteLine($"B{totalBits} : bit-faithful unsigned validé ({domain} valeurs)");
             }
         }
 
@@ -106,107 +92,91 @@ namespace FixedEngine.Tests.Math
         [Category("FixedMath/UFixed")]
         public void Sin_UFixed_B2toB31_MaxDiffMeasure()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
             string report = "\nBn\tMaxDiff\tMaxDiffDeg\tMaxDiffValue\tMaxDiffAngleEqDeg";
             var rng = new Random(98765);
 
             for (int totalBits = 2; totalBits <= 31; totalBits++)
             {
-                var tagTotal = asm.GetType($"FixedEngine.Math.B{totalBits}");
+                var tagTotal = asm.GetType($"FixedEngine.Core.B{totalBits}");
                 if (tagTotal == null)
                 {
-                    Console.WriteLine($"Type FixedEngine.Math.B{totalBits} absent : SKIP");
+                    System.Console.WriteLine($"Type FixedEngine.Core.B{totalBits} absent : SKIP");
                     continue;
                 }
-
-                // TFrac arbitraire (comme pour Fixed)
-                var tagFrac = asm.GetType("FixedEngine.Math.B16") ?? asm.GetType("FixedEngine.Math.B8");
+                var tagFrac = asm.GetType("FixedEngine.Core.B16") ?? asm.GetType("FixedEngine.Core.B8");
                 if (tagFrac == null)
                 {
-                    Console.WriteLine($"Type FixedEngine.Math.B16 ou B8 absent : SKIP");
+                    System.Console.WriteLine($"Type FixedEngine.Core.B16 ou B8 absent : SKIP");
                     continue;
                 }
-
                 var angleType = typeof(UFixed<,>).MakeGenericType(tagTotal, tagFrac);
-
-                // SinRaw<UFixed<,>>
                 var miGen = typeof(FixedMath)
                     .GetMethods()
                     .FirstOrDefault(m =>
-                        m.Name == "SinRaw"
+                        m.Name == "SinRawDebug"
                         && m.IsGenericMethod
                         && m.GetParameters().Length == 1
                         && m.GetParameters()[0].ParameterType.IsGenericType
                         && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(UFixed<,>));
-
                 if (miGen == null)
                 {
-                    Console.WriteLine("Méthode générique FixedMath.SinRaw<TUInt, TFrac>(UFixed<TUInt, TFrac>) absente : SKIP");
+                    System.Console.WriteLine("Méthode générique FixedMath.SinRawDebug<TUInt, TFrac>(UFixed<TUInt, TFrac>) absente : SKIP");
                     continue;
                 }
-
                 var mi = miGen.MakeGenericMethod(tagTotal, tagFrac);
-
                 uint maxRawU = (1u << totalBits) - 1u;
-                ulong domain = (ulong)maxRawU + 1UL;
+                ulong domain = (ulong)maxRawU + 1u;
                 int numSamples = (totalBits >= 28) ? 1_000_000 : (int)domain;
-
                 int maxDiff = 0;
                 double maxDiffDeg = 0;
                 double maxDiffValue = 0;
                 double maxDiffAngleEqDeg = 0;
-
                 for (int i = 0; i < numSamples; i++)
                 {
-                    uint rawU;
+                    uint uraw;
                     if (totalBits >= 28)
                     {
-                        ulong span = (ulong)maxRawU + 1UL;
-                        long r = rng.NextInt64(0, (long)span);
-                        rawU = (uint)r;
+                        ulong span = (ulong)maxRawU + 1u;
+                        uraw = (uint)rng.NextInt64(0, (long)span);
                     }
                     else
                     {
-                        rawU = (uint)i; // balayage complet [0..maxRawU]
+                        uraw = (uint)i;
                     }
-
-                    int raw = (int)rawU;
-                    var angle = Activator.CreateInstance(angleType, raw);
+                    var angle = Activator.CreateInstance(angleType, uraw);
                     int val = (int)mi.Invoke(null, new[] { angle });
-
                     // Map sur [0, 2π)
-                    double period = (double)(1u << totalBits);
-                    double radians = (double)rawU / period * 2.0 * System.Math.PI;
-
-                    int expected = (int)System.Math.Round(System.Math.Sin(radians) * 65536.0);
+                    double radians = (double)uraw / ((double)maxRawU + 1.0) * 2.0 * System.Math.PI;
+                    int expected = (int)System.Math.Round(System.Math.Sin(radians) * 65536);
                     int diff = System.Math.Abs(val - expected);
-
                     if (diff > maxDiff)
                     {
                         maxDiff = diff;
                         maxDiffValue = (double)diff / 65536.0;
                         maxDiffDeg = radians * 180.0 / System.Math.PI;
                         double cosTheta = System.Math.Cos(radians);
-                        maxDiffAngleEqDeg = (cosTheta != 0.0)
+                        maxDiffAngleEqDeg = (cosTheta != 0)
                             ? maxDiffValue / System.Math.Abs(cosTheta) * 180.0 / System.Math.PI
                             : double.PositiveInfinity;
                     }
                 }
-
                 report += $"\nB{totalBits}\t{maxDiff}\t{maxDiffDeg:0.###}\t{maxDiffValue:0.00000}\t{maxDiffAngleEqDeg:0.00000}";
             }
-
             System.Console.WriteLine(report);
             Assert.Pass(report);
         }
+
 
         [Test]
         [Category("FixedMath/UFixed")]
         public void Sin_UFixed_B2toB31_VsMathSin()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
             string report = "\nBn\tMaxDiffInt\tMaxDiffNorm\tAtDeg\tRaw\tVal\tExp";
             var rng = new Random(12345);
+
+            // Trouve la bonne méthode Sin générique
             var miGen = typeof(FixedMath)
                 .GetMethods()
                 .FirstOrDefault(m =>
@@ -217,26 +187,29 @@ namespace FixedEngine.Tests.Math
                     && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(UFixed<,>));
             if (miGen == null)
                 Assert.Fail("Méthode générique FixedMath.Sin<TUInt, TFrac>(UFixed<TUInt, TFrac>) introuvable.");
+
             for (int totalBits = 2; totalBits <= 31; totalBits++)
             {
-                var tagTotal = asm.GetType($"FixedEngine.Math.B{totalBits}");
+                var tagTotal = asm.GetType($"FixedEngine.Core.B{totalBits}");
                 if (tagTotal == null)
                 {
-                    Console.WriteLine($"Type FixedEngine.Math.B{totalBits} absent : SKIP");
+                    Console.WriteLine($"Type FixedEngine.Core.B{totalBits} absent : SKIP");
                     continue;
                 }
-                var tagFrac = asm.GetType("FixedEngine.Math.B16") ?? asm.GetType("FixedEngine.Math.B8");
+                var tagFrac = asm.GetType("FixedEngine.Core.B16") ?? asm.GetType("FixedEngine.Core.B8");
                 if (tagFrac == null)
                 {
-                    Console.WriteLine($"Type FixedEngine.Math.B16 ou B8 absent : SKIP");
+                    Console.WriteLine($"Type FixedEngine.Core.B16 ou B8 absent : SKIP");
                     continue;
                 }
-                // Obtenir TFracBits
-                int TFracBits = tagFrac.Name == "B16" ? 16 : 8;
+
                 var angleType = typeof(UFixed<,>).MakeGenericType(tagTotal, tagFrac);
                 var mi = miGen.MakeGenericMethod(tagTotal, tagFrac);
+
+                // Domaine binaire complet sur totalBits
                 uint maxRawU = (1u << totalBits) - 1u;
                 int maxAmp = (1 << (totalBits - 1)) - 1;
+
                 int numSamples = (totalBits >= 28)
                     ? 1_000_000
                     : System.Math.Min((int)(maxRawU + 1u), 1_000_000);
@@ -245,12 +218,14 @@ namespace FixedEngine.Tests.Math
                     Console.WriteLine($"totalBits={totalBits} : numSamples <= 0, skip.");
                     continue;
                 }
+
                 long maxDiffInt = 0;
                 double maxDiffNorm = 0.0;
                 double atDeg = 0.0;
                 int rawAtMax = 0;
                 int valAtMax = 0;
                 int expAtMax = 0;
+
                 for (int i = 0; i < numSamples; i++)
                 {
                     uint uraw;
@@ -265,18 +240,19 @@ namespace FixedEngine.Tests.Math
                         ulong span = (ulong)maxRawU;
                         uraw = (uint)((span * (ulong)i) / (ulong)(numSamples - 1));
                     }
-                    int raw = (int)uraw;
-                    var angle = Activator.CreateInstance(angleType, raw);
+
+                    // Injection brute (pas de shift !)
+                    var angle = Activator.CreateInstance(angleType, uraw);
+
                     int val = (int)mi.Invoke(null, new[] { angle });
-                    // Normalisation correcte pour UFixed
-                    double fracScale = 1.0 / (1u << TFracBits); // Échelle fractionnaire
-                    double value = (double)uraw * fracScale; // Valeur réelle
-                    double maxValue = (double)maxRawU * fracScale; // Valeur max
-                    double radians = (value / (maxValue + 1.0)) * 2.0 * System.Math.PI;
+
+                    // Même mapping que Fixed (cycle complet sur tout le domaine binaire)
+                    double radians = (double)uraw / ((double)maxRawU + 1.0) * 2.0 * System.Math.PI;
                     double s = System.Math.Sin(radians);
                     int expected = (int)System.Math.Round(s * maxAmp);
                     if (expected < -maxAmp) expected = -maxAmp;
                     if (expected > maxAmp) expected = maxAmp;
+
                     long diffLong = (long)val - (long)expected;
                     if (diffLong < 0) diffLong = -diffLong;
                     if (diffLong > maxDiffInt)
@@ -284,19 +260,122 @@ namespace FixedEngine.Tests.Math
                         maxDiffInt = diffLong;
                         maxDiffNorm = (double)diffLong / maxAmp;
                         atDeg = radians * 180.0 / System.Math.PI;
-                        rawAtMax = raw;
+                        rawAtMax = (int)uraw;
                         valAtMax = val;
                         expAtMax = expected;
                     }
                 }
-                report +=
-                    $"\nB{totalBits}\t{maxDiffInt}\t{maxDiffNorm:0.000000}\t{atDeg:0.###}\t{rawAtMax}\t{valAtMax}\t{expAtMax}";
+
+                report += $"\nB{totalBits}\t{maxDiffInt}\t{maxDiffNorm:0.000000}\t{atDeg:0.###}\t{rawAtMax}\t{valAtMax}\t{expAtMax}";
             }
             Console.WriteLine(report);
             Assert.Pass(report);
         }
         #endregion
 
+        #region --- COS LUT Retro (UFixed) ---
+        [Test]
+        [Category("FixedMath/UFixed")]
+        public void Cos_UFixed_B2toB31_VsMathCos()
+        {
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
+            string report = "\nBn\tMaxDiffInt\tMaxDiffNorm\tAtDeg\tRaw\tVal\tExp";
+            var rng = new Random(54321);
+
+            // Trouve la bonne méthode Cos générique
+            var miGen = typeof(FixedMath)
+                .GetMethods()
+                .FirstOrDefault(m =>
+                    m.Name == "Cos"
+                    && m.IsGenericMethod
+                    && m.GetParameters().Length == 1
+                    && m.GetParameters()[0].ParameterType.IsGenericType
+                    && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(UFixed<,>));
+            if (miGen == null)
+                Assert.Fail("Méthode générique FixedMath.Cos<TUInt, TFrac>(UFixed<TUInt, TFrac>) introuvable.");
+
+            for (int totalBits = 2; totalBits <= 31; totalBits++)
+            {
+                var tagTotal = asm.GetType($"FixedEngine.Core.B{totalBits}");
+                if (tagTotal == null)
+                {
+                    Console.WriteLine($"Type FixedEngine.Core.B{totalBits} absent : SKIP");
+                    continue;
+                }
+                var tagFrac = asm.GetType("FixedEngine.Core.B16") ?? asm.GetType("FixedEngine.Core.B8");
+                if (tagFrac == null)
+                {
+                    Console.WriteLine($"Type FixedEngine.Core.B16 ou B8 absent : SKIP");
+                    continue;
+                }
+
+                var angleType = typeof(UFixed<,>).MakeGenericType(tagTotal, tagFrac);
+                var mi = miGen.MakeGenericMethod(tagTotal, tagFrac);
+
+                uint maxRawU = (1u << totalBits) - 1u;
+                int maxAmp = (1 << (totalBits - 1)) - 1;
+
+                int numSamples = (totalBits >= 28)
+                    ? 1_000_000
+                    : System.Math.Min((int)(maxRawU + 1u), 1_000_000);
+                if (numSamples <= 0)
+                {
+                    Console.WriteLine($"totalBits={totalBits} : numSamples <= 0, skip.");
+                    continue;
+                }
+
+                long maxDiffInt = 0;
+                double maxDiffNorm = 0.0;
+                double atDeg = 0.0;
+                int rawAtMax = 0;
+                int valAtMax = 0;
+                int expAtMax = 0;
+
+                for (int i = 0; i < numSamples; i++)
+                {
+                    uint uraw;
+                    if (totalBits >= 28)
+                    {
+                        ulong span = (ulong)maxRawU + 1UL;
+                        long r = rng.NextInt64(0, (long)span);
+                        uraw = (uint)r;
+                    }
+                    else
+                    {
+                        ulong span = (ulong)maxRawU;
+                        uraw = (uint)((span * (ulong)i) / (ulong)(numSamples - 1));
+                    }
+
+                    var angle = Activator.CreateInstance(angleType, uraw);
+
+                    int val = (int)mi.Invoke(null, new[] { angle });
+
+                    double radians = (double)uraw / ((double)maxRawU + 1.0) * 2.0 * System.Math.PI;
+                    double c = System.Math.Cos(radians);
+                    int expected = (int)System.Math.Round(c * maxAmp);
+                    if (expected < -maxAmp) expected = -maxAmp;
+                    if (expected > maxAmp) expected = maxAmp;
+
+                    long diffLong = (long)val - (long)expected;
+                    if (diffLong < 0) diffLong = -diffLong;
+                    if (diffLong > maxDiffInt)
+                    {
+                        maxDiffInt = diffLong;
+                        maxDiffNorm = (double)diffLong / maxAmp;
+                        atDeg = radians * 180.0 / System.Math.PI;
+                        rawAtMax = (int)uraw;
+                        valAtMax = val;
+                        expAtMax = expected;
+                    }
+                }
+
+                report += $"\nB{totalBits}\t{maxDiffInt}\t{maxDiffNorm:0.000000}\t{atDeg:0.###}\t{rawAtMax}\t{valAtMax}\t{expAtMax}";
+            }
+            Console.WriteLine(report);
+            Assert.Pass(report);
+        }
+
+        #endregion
 
         #endregion
 
@@ -311,8 +390,8 @@ namespace FixedEngine.Tests.Math
         [Test]
         public void Asin_UFixed_Q0_8_B9toB31_MaxAngleError()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
-            var fracTag = asm.GetType("FixedEngine.Math.B8"); // F = 8 (Q0.8)
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
+            var fracTag = asm.GetType("FixedEngine.Core.B8"); // F = 8 (Q0.8)
             string report = "\nBn\tMaxAngleErrDeg\tMaxAngleErrRad\tMaxAngleErrTicks\tAtDeg";
 
             static long Gcd(long a, long b) { while (b != 0) { long t = a % b; a = b; b = t; } return System.Math.Abs(a); }
@@ -331,7 +410,7 @@ namespace FixedEngine.Tests.Math
 
             for (int bits = 9; bits <= 31; bits++)
             {
-                var intTag = asm.GetType($"FixedEngine.Math.B{bits}");
+                var intTag = asm.GetType($"FixedEngine.Core.B{bits}");
                 if (intTag == null) { Console.WriteLine($"Type B{bits} absent : SKIP"); continue; }
 
                 var ufixedType = typeof(UFixed<,>).MakeGenericType(intTag, fracTag);
@@ -391,7 +470,7 @@ namespace FixedEngine.Tests.Math
                     double x = System.Math.Clamp(valQ16 / 65536.0, -1.0, 1.0);
                     double asinRadRef = System.Math.Asin(x);
                     int expectedQ16 = (int)System.Math.Round(asinRadRef * 65536.0);
-                    int expectedBn = FixedMath.Q16_16AngleToBn(expectedQ16, bits, signed: true); // [-π/2..+π/2] signé
+                    int expectedBn = FixedMath.Q16_16AngleToBn(expectedQ16, bits); // [-π/2..+π/2] signé
                     int diffTicks = System.Math.Abs(asinBn - expectedBn);
 
                     if (diffTicks > bestTicks)
@@ -418,7 +497,7 @@ namespace FixedEngine.Tests.Math
                     double x = System.Math.Clamp(valQ16 / 65536.0, -1.0, 1.0);
                     double asinRadRef = System.Math.Asin(x);
                     int expectedQ16 = (int)System.Math.Round(asinRadRef * 65536.0);
-                    int expectedBn = FixedMath.Q16_16AngleToBn(expectedQ16, bits, signed: true);
+                    int expectedBn = FixedMath.Q16_16AngleToBn(expectedQ16, bits);
                     int diffTicks = System.Math.Abs(asinBn - expectedBn);
 
                     if (diffTicks > bestTicks)
@@ -444,8 +523,8 @@ namespace FixedEngine.Tests.Math
         [Test]
         public void Acos_UFixed_Q0_8_B9toB31_MaxAngleError()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
-            var fracTag = asm.GetType("FixedEngine.Math.B8"); // F = 8 (Q0.8)
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
+            var fracTag = asm.GetType("FixedEngine.Core.B8"); // F = 8 (Q0.8)
             string report = "\nBn\tMaxAngleErrDeg\tMaxAngleErrRad\tMaxAngleErrTicks\tAtDeg";
 
             static long Gcd(long a, long b) { while (b != 0) { long t = a % b; a = b; b = t; } return System.Math.Abs(a); }
@@ -462,7 +541,7 @@ namespace FixedEngine.Tests.Math
 
             for (int bits = 9; bits <= 31; bits++)
             {
-                var intTag = asm.GetType($"FixedEngine.Math.B{bits}");
+                var intTag = asm.GetType($"FixedEngine.Core.B{bits}");
                 if (intTag == null) { Console.WriteLine($"Type B{bits} absent : SKIP"); continue; }
 
                 var ufixedType = typeof(UFixed<,>).MakeGenericType(intTag, fracTag);

@@ -21,23 +21,23 @@ namespace FixedEngine.Tests.Math
         [Category("FixedMath/Fixed")]
         public void Sin_Fixed_B2toB32_BitFaithful()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
             int lutBits = 12;
             int lutMask = (1 << lutBits) - 1;
             var lut = SinLUT4096.LUT;
             for (int totalBits = 2; totalBits <= 32; totalBits++)
             {
-                var tagTotal = asm.GetType($"FixedEngine.Math.B{totalBits}");
+                var tagTotal = asm.GetType($"FixedEngine.Core.B{totalBits}");
                 if (tagTotal == null)
                 {
-                    System.Console.WriteLine($"Type FixedEngine.Math.B{totalBits} absent : SKIP");
+                    System.Console.WriteLine($"Type FixedEngine.Core.B{totalBits} absent : SKIP");
                     continue;
                 }
                 // Choix d'un TFrac fixe arbitraire (B16 courant, fallback B8) car TFrac n'impacte pas le résultat
-                var tagFrac = asm.GetType("FixedEngine.Math.B16") ?? asm.GetType("FixedEngine.Math.B8");
+                var tagFrac = asm.GetType("FixedEngine.Core.B16") ?? asm.GetType("FixedEngine.Core.B8");
                 if (tagFrac == null)
                 {
-                    System.Console.WriteLine($"Type FixedEngine.Math.B16 ou B8 absent : SKIP");
+                    System.Console.WriteLine($"Type FixedEngine.Core.B16 ou B8 absent : SKIP");
                     continue;
                 }
                 var angleType = typeof(Fixed<,>).MakeGenericType(tagTotal, tagFrac);
@@ -70,13 +70,13 @@ namespace FixedEngine.Tests.Math
                     var miGen = typeof(FixedMath)
                         .GetMethods()
                         .FirstOrDefault(m =>
-                            m.Name == "SinRaw"
+                            m.Name == "SinRawDebug"
                             && m.IsGenericMethod
                             && m.GetParameters().Length == 1
                             && m.GetParameters()[0].ParameterType.IsGenericType
                             && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(Fixed<,>));
                     if (miGen == null)
-                        Assert.Fail("Méthode générique FixedMath.SinRaw<TTotal, TFrac>(Fixed<TTotal, TFrac>) absente !");
+                        Assert.Fail("Méthode générique FixedMath.SinRawDebug<TTotal, TFrac>(Fixed<TTotal, TFrac>) absente !");
                     var mi = miGen.MakeGenericMethod(tagTotal, tagFrac);
                     int resultInt = (int)mi.Invoke(null, new[] { angle });
                     Assert.That(resultInt, Is.EqualTo(expected),
@@ -85,41 +85,42 @@ namespace FixedEngine.Tests.Math
                 System.Console.WriteLine($"B{totalBits} : bit-faithful signé validé ({domain} valeurs)");
             }
         }
+
         [Explicit]
         [Test]
         [Category("FixedMath/Fixed")]
         public void Sin_Fixed_B2toB31_MaxDiffMeasure()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
             string report = "\nBn\tMaxDiff\tMaxDiffDeg\tMaxDiffValue\tMaxDiffAngleEqDeg";
             var rng = new Random(98765);
             for (int totalBits = 2; totalBits <= 31; totalBits++)
             {
-                var tagTotal = asm.GetType($"FixedEngine.Math.B{totalBits}");
+                var tagTotal = asm.GetType($"FixedEngine.Core.B{totalBits}");
                 if (tagTotal == null)
                 {
-                    System.Console.WriteLine($"Type FixedEngine.Math.B{totalBits} absent : SKIP");
+                    System.Console.WriteLine($"Type FixedEngine.Core.B{totalBits} absent : SKIP");
                     continue;
                 }
                 // Choix d'un TFrac fixe arbitraire (B16 courant, fallback B8) car TFrac n'impacte pas le résultat
-                var tagFrac = asm.GetType("FixedEngine.Math.B16") ?? asm.GetType("FixedEngine.Math.B8");
+                var tagFrac = asm.GetType("FixedEngine.Core.B16") ?? asm.GetType("FixedEngine.Core.B8");
                 if (tagFrac == null)
                 {
-                    System.Console.WriteLine($"Type FixedEngine.Math.B16 ou B8 absent : SKIP");
+                    System.Console.WriteLine($"Type FixedEngine.Core.B16 ou B8 absent : SKIP");
                     continue;
                 }
                 var angleType = typeof(Fixed<,>).MakeGenericType(tagTotal, tagFrac);
                 var miGen = typeof(FixedMath)
                     .GetMethods()
                     .FirstOrDefault(m =>
-                        m.Name == "SinRaw"
+                        m.Name == "SinRawDebug"
                         && m.IsGenericMethod
                         && m.GetParameters().Length == 1
                         && m.GetParameters()[0].ParameterType.IsGenericType
                         && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(Fixed<,>));
                 if (miGen == null)
                 {
-                    System.Console.WriteLine("Méthode générique FixedMath.SinRaw<TTotal, TFrac>(Fixed<TTotal, TFrac>) absente : SKIP");
+                    System.Console.WriteLine("Méthode générique FixedMath.SinRawDebug<TTotal, TFrac>(Fixed<TTotal, TFrac>) absente : SKIP");
                     continue;
                 }
                 var mi = miGen.MakeGenericMethod(tagTotal, tagFrac);
@@ -166,11 +167,12 @@ namespace FixedEngine.Tests.Math
             System.Console.WriteLine(report);
             Assert.Pass(report);
         }
+
         [Test]
         [Category("FixedMath/Fixed")]
         public void Sin_Fixed_B2toB31_VsMathSin()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
             string report = "\nBn\tMaxDiffInt\tMaxDiffNorm\tAtDeg\tRaw\tVal\tExp";
             var rng = new Random(12345);
             // FixedMath.Sin<TTotal, TFrac>(Fixed<TTotal, TFrac>)
@@ -186,17 +188,17 @@ namespace FixedEngine.Tests.Math
                 Assert.Fail("Méthode générique FixedMath.Sin<TTotal, TFrac>(Fixed<TTotal, TFrac>) introuvable.");
             for (int totalBits = 2; totalBits <= 31; totalBits++)
             {
-                var tagTotal = asm.GetType($"FixedEngine.Math.B{totalBits}");
+                var tagTotal = asm.GetType($"FixedEngine.Core.B{totalBits}");
                 if (tagTotal == null)
                 {
-                    Console.WriteLine($"Type FixedEngine.Math.B{totalBits} absent : SKIP");
+                    Console.WriteLine($"Type FixedEngine.Core.B{totalBits} absent : SKIP");
                     continue;
                 }
                 // Choix d'un TFrac fixe arbitraire (B16 courant, fallback B8) car TFrac n'impacte pas le résultat
-                var tagFrac = asm.GetType("FixedEngine.Math.B16") ?? asm.GetType("FixedEngine.Math.B8");
+                var tagFrac = asm.GetType("FixedEngine.Core.B16") ?? asm.GetType("FixedEngine.Core.B8");
                 if (tagFrac == null)
                 {
-                    Console.WriteLine($"Type FixedEngine.Math.B16 ou B8 absent : SKIP");
+                    Console.WriteLine($"Type FixedEngine.Core.B16 ou B8 absent : SKIP");
                     continue;
                 }
                 var angleType = typeof(Fixed<,>).MakeGenericType(tagTotal, tagFrac);
@@ -260,6 +262,99 @@ namespace FixedEngine.Tests.Math
 
         #endregion
 
+        #region --- COS LUT Retro (Fixed) ---
+        [Test]
+        [Category("FixedMath/Fixed")]
+        public void Cos_Fixed_B2toB31_VsMathCos()
+        {
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
+            string report = "\nBn\tMaxDiffInt\tMaxDiffNorm\tAtDeg\tRaw\tVal\tExp";
+            var rng = new Random(54321);
+            // FixedMath.Cos<TTotal, TFrac>(Fixed<TTotal, TFrac>)
+            var miGen = typeof(FixedMath)
+                .GetMethods()
+                .FirstOrDefault(m =>
+                    m.Name == "Cos"
+                    && m.IsGenericMethod
+                    && m.GetParameters().Length == 1
+                    && m.GetParameters()[0].ParameterType.IsGenericType
+                    && m.GetParameters()[0].ParameterType.GetGenericTypeDefinition() == typeof(Fixed<,>));
+            if (miGen == null)
+                Assert.Fail("Méthode générique FixedMath.Cos<TTotal, TFrac>(Fixed<TTotal, TFrac>) introuvable.");
+            for (int totalBits = 2; totalBits <= 31; totalBits++)
+            {
+                var tagTotal = asm.GetType($"FixedEngine.Core.B{totalBits}");
+                if (tagTotal == null)
+                {
+                    Console.WriteLine($"Type FixedEngine.Core.B{totalBits} absent : SKIP");
+                    continue;
+                }
+                // Choix d'un TFrac fixe arbitraire (B16 courant, fallback B8)
+                var tagFrac = asm.GetType("FixedEngine.Core.B16") ?? asm.GetType("FixedEngine.Core.B8");
+                if (tagFrac == null)
+                {
+                    Console.WriteLine($"Type FixedEngine.Core.B16 ou B8 absent : SKIP");
+                    continue;
+                }
+                var angleType = typeof(Fixed<,>).MakeGenericType(tagTotal, tagFrac);
+                var mi = miGen.MakeGenericMethod(tagTotal, tagFrac);
+                int minRaw = -(1 << (totalBits - 1));
+                int maxRaw = (1 << (totalBits - 1)) - 1;
+                int numSamples = (totalBits >= 28) ? 1_000_000 : System.Math.Min((maxRaw - minRaw + 1), 1_000_000);
+                if (numSamples <= 0)
+                {
+                    Console.WriteLine($"totalBits={totalBits} : numSamples <= 0, skip.");
+                    continue;
+                }
+                int maxAmp = (1 << (totalBits - 1)) - 1;
+                long maxDiffInt = 0;
+                double maxDiffNorm = 0.0;
+                double atDeg = 0.0;
+                int rawAtMax = 0;
+                int valAtMax = 0;
+                int expAtMax = 0;
+                uint maxRawU = (1u << totalBits) - 1u;
+                for (int i = 0; i < numSamples; i++)
+                {
+                    int raw;
+                    if (totalBits >= 28)
+                    {
+                        long span = (long)maxRaw - (long)minRaw + 1;
+                        long r = rng.NextInt64(0, span);
+                        raw = (int)(minRaw + r);
+                    }
+                    else
+                    {
+                        long span = (long)maxRaw - (long)minRaw;
+                        raw = (int)(minRaw + (span * i) / (numSamples - 1));
+                    }
+                    var angle = Activator.CreateInstance(angleType, raw);
+                    int val = (int)mi.Invoke(null, new[] { angle });
+                    uint uraw = (uint)raw & maxRawU;
+                    double radians = (double)uraw / ((double)maxRawU + 1.0) * 2.0 * System.Math.PI;
+                    double c = System.Math.Cos(radians);
+                    int expected = (int)System.Math.Round(c * maxAmp);
+                    if (expected < -maxAmp) expected = -maxAmp;
+                    if (expected > maxAmp) expected = maxAmp;
+                    long diffLong = (long)val - (long)expected;
+                    if (diffLong < 0) diffLong = -diffLong;
+                    if (diffLong > maxDiffInt)
+                    {
+                        maxDiffInt = diffLong;
+                        maxDiffNorm = (double)diffLong / maxAmp;
+                        atDeg = radians * 180.0 / System.Math.PI;
+                        rawAtMax = raw;
+                        valAtMax = val;
+                        expAtMax = expected;
+                    }
+                }
+                report += $"\nB{totalBits}\t{maxDiffInt}\t{maxDiffNorm:0.000000}\t{atDeg:0.###}\t{rawAtMax}\t{valAtMax}\t{expAtMax}";
+            }
+            Console.WriteLine(report);
+            Assert.Pass(report);
+        }
+
+        #endregion
 
         #endregion
 
@@ -274,8 +369,8 @@ namespace FixedEngine.Tests.Math
         [Test]
         public void Asin_Fixed_Q8_8_B9toB31_MaxAngleError()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
-            var fracTag = asm.GetType("FixedEngine.Math.B8"); // F = 8 (Q8.8)
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
+            var fracTag = asm.GetType("FixedEngine.Core.B8"); // F = 8 (Q8.8)
             string report = "\nBn\tMaxAngleErrDeg\tMaxAngleErrRad\tMaxAngleErrTicks\tAtDeg";
 
             // mapping inverse Q16 -> raw (Fixed, signé) en miroir du prod (shifts bit-faithful)
@@ -286,7 +381,7 @@ namespace FixedEngine.Tests.Math
 
             for (int bits = 9; bits <= 31; bits++)
             {
-                var intTag = asm.GetType($"FixedEngine.Math.B{bits}");
+                var intTag = asm.GetType($"FixedEngine.Core.B{bits}");
                 if (intTag == null) { Console.WriteLine($"Type B{bits} absent : SKIP"); continue; }
 
                 var fixedType = typeof(Fixed<,>).MakeGenericType(intTag, fracTag);
@@ -344,7 +439,7 @@ namespace FixedEngine.Tests.Math
                     double x = System.Math.Clamp(valQ16 / 65536.0, -1.0, 1.0);
                     double asinRadRef = System.Math.Asin(x);
                     int expectedQ16 = (int)System.Math.Round(asinRadRef * 65536.0);
-                    int expectedBn = FixedMath.Q16_16AngleToBn(expectedQ16, bits, signed: true);
+                    int expectedBn = FixedMath.Q16_16AngleToBn(expectedQ16, bits);
 
                     int diffTicks = System.Math.Abs(asinBn - expectedBn);
                     if (diffTicks > bestTicks)
@@ -370,7 +465,7 @@ namespace FixedEngine.Tests.Math
                     double x = System.Math.Clamp(valQ16 / 65536.0, -1.0, 1.0);
                     double asinRadRef = System.Math.Asin(x);
                     int expectedQ16 = (int)System.Math.Round(asinRadRef * 65536.0);
-                    int expectedBn = FixedMath.Q16_16AngleToBn(expectedQ16, bits, signed: true);
+                    int expectedBn = FixedMath.Q16_16AngleToBn(expectedQ16, bits);
 
                     int diffTicks = System.Math.Abs(asinBn - expectedBn);
                     if (diffTicks > bestTicks)
@@ -396,8 +491,8 @@ namespace FixedEngine.Tests.Math
         [Test]
         public void Acos_Fixed_Q8_8_B9toB31_MaxAngleError()
         {
-            var asm = typeof(FixedEngine.Math.B2).Assembly;
-            var fracTag = asm.GetType("FixedEngine.Math.B8"); // F = 8 (Q8.8)
+            var asm = typeof(FixedEngine.Core.B2).Assembly;
+            var fracTag = asm.GetType("FixedEngine.Core.B8"); // F = 8 (Q8.8)
             string report = "\nBn\tMaxAngleErrDeg\tMaxAngleErrRad\tMaxAngleErrTicks\tAtDeg";
 
             static int ValQ16ToRaw_Fixed(int valQ16, int F)
@@ -407,7 +502,7 @@ namespace FixedEngine.Tests.Math
 
             for (int bits = 9; bits <= 31; bits++)
             {
-                var intTag = asm.GetType($"FixedEngine.Math.B{bits}");
+                var intTag = asm.GetType($"FixedEngine.Core.B{bits}");
                 if (intTag == null) { Console.WriteLine($"Type B{bits} absent : SKIP"); continue; }
 
                 var fixedType = typeof(Fixed<,>).MakeGenericType(intTag, fracTag);

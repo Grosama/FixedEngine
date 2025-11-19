@@ -1,4 +1,6 @@
-﻿namespace FixedEngine.Math
+﻿using System;
+
+namespace FixedEngine.Core
 {
     // Tags pour toutes les tailles de bits SIGNÉS de 0 à 32
     public struct B0 { }
@@ -82,6 +84,53 @@
             else if (typeof(T) == typeof(B32)) Value = 32;
 
             else throw new System.NotSupportedException($"BitsOf<{typeof(T).Name}> n'est pas supporté.");
+        }
+    }
+
+    public static class BitsToType
+    {
+        public static Type FromValue(int bits)
+        {
+            switch (bits)
+            {
+                case 0: return typeof(B0);
+                case 1: return typeof(B1);
+                case 2: return typeof(B2);
+                case 3: return typeof(B3);
+                case 4: return typeof(B4);
+                case 5: return typeof(B5);
+                case 6: return typeof(B6);
+                case 7: return typeof(B7);
+                case 8: return typeof(B8);
+                case 9: return typeof(B9);
+                case 10: return typeof(B10);
+                case 11: return typeof(B11);
+                case 12: return typeof(B12);
+                case 13: return typeof(B13);
+                case 14: return typeof(B14);
+                case 15: return typeof(B15);
+                case 16: return typeof(B16);
+                case 17: return typeof(B17);
+                case 18: return typeof(B18);
+                case 19: return typeof(B19);
+                case 20: return typeof(B20);
+                case 21: return typeof(B21);
+                case 22: return typeof(B22);
+                case 23: return typeof(B23);
+                case 24: return typeof(B24);
+                case 25: return typeof(B25);
+                case 26: return typeof(B26);
+                case 27: return typeof(B27);
+                case 28: return typeof(B28);
+                case 29: return typeof(B29);
+                case 30: return typeof(B30);
+                case 31: return typeof(B31);
+                case 32: return typeof(B32);
+
+                default:
+                    throw new NotSupportedException(
+                        $"BitsToType.FromValue({bits}) n'est pas supporté (seulement 0 à 32).");
+            }
         }
     }
 }

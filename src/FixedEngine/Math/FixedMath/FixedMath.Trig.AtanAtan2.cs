@@ -62,7 +62,7 @@ namespace FixedEngine.Math
             uint u1 = (uint)((1 << bits) - 1);
             int q16 = AtanLutCore(x.Raw, u1, bits);        // atan in Q16 (0..1)
 
-            return Q16_16AngleToBn(q16, bits, signed: true);           // [-π/2..+π/2] → Bn signé
+            return Q16_16AngleToBn(q16, bits);           // [-π/2..+π/2] → Bn signé
         }
         #endregion
 
@@ -94,7 +94,7 @@ namespace FixedEngine.Math
             if (sign != 0) q16 = -q16;                            // atan(-x) = -atan(x)
 
             // fenêtre [-π/2 .. +π/2] → Bn signé [-max..+max] (même mapper que ASIN)
-            return Q16_16AngleToBn(q16, bits, signed: true);
+            return Q16_16AngleToBn(q16, bits);
         }
 
         #endregion
@@ -118,7 +118,7 @@ namespace FixedEngine.Math
                 : (TrigConsts.PI_2_Q[16]
                    - AtanLutCore((uint)(((ulong)one * one) / raw), one, Abits));
 
-            return Q16_16AngleToBn(q16, Abits, signed: true);        // sortie: angle principal signé
+            return Q16_16AngleToBn(q16, Abits);        // sortie: angle principal signé
         }
 
         #endregion
@@ -147,7 +147,7 @@ namespace FixedEngine.Math
 
             if (sign != 0) q16 = -q16;                              // impaire
 
-            return Q16_16AngleToBn(q16, Abits, signed: true);        // fenêtre [-π/2..+π/2]
+            return Q16_16AngleToBn(q16, Abits);        // fenêtre [-π/2..+π/2]
         }
         #endregion
 
