@@ -4,6 +4,7 @@ using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
+using System;
 
 namespace FixedEngine.Math
 {
@@ -64,6 +65,7 @@ namespace FixedEngine.Math
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int SinCore_HQ(uint uraw, int bits)
         {
+            
             const int LUT_SIZE = 4096;
             var sinLUT = SinLUT4096.LUT;         // Sin en Q1.31
             var angleLUT = SinAngleLUT4096Q32.LUT;  // Angles en Q0.32
