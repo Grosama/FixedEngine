@@ -8,52 +8,26 @@ using s0f16 = FixedEngine.Core.Fixed<FixedEngine.Core.B16, FixedEngine.Core.B16>
 public class CurveGenerator
 {
     
-    public static void GenerateAndSaveSinCurve(int samples, int rangeQ16, string filename, bool includeReference = true)
-    {
-        List<(float x, float y, float? yRef)> points = new List<(float x, float y, float? yRef)>();
-        int step = rangeQ16 / samples;
-
-        // Générer les points
-        for (int i = 0; i <= samples; i++)
-        {
-            int xQ16 = i * step; // Angle en Q16.16
-            IntN<B16> angle = new IntN<B16>(xQ16); // Construit l’angle signé
-            float yQ16 = (float)s0f16.Sin(angle); // Appelle Sin<IntN<B16>>
-            float x = xQ16 * (2.0f * MathF.PI / 65534.0f);
-            float y = yQ16;
-            float? yRef;
-            if (includeReference)
-            {
-                yRef = (float)Math.Sin(x);
-            }
-            else
-            {
-                yRef = null;
-            }
-
-            points.Add((x, y, yRef));
-        }
-
-        // Écrire dans un fichier CSV
-        using (var writer = new StreamWriter(filename))
-        {
-            writer.WriteLine(includeReference ? "x;y;y_ref" : "x;y"); // En-tête
-            foreach (var (x, y, yRef) in points)
-            {
-                if (includeReference)
-                    writer.WriteLine($"{x:F6};{y:F6};{yRef:F6}");
-                else
-                    writer.WriteLine($"{x:F6};{y:F6}");
-            }
-        }
-
-        Console.WriteLine($"Fichier CSV généré : {filename}");
-    }
-
-
     private void GenerateCurveFor(Type bitsType)
     {
-        string root = @"W:\Projects\Csharp\FixedEngine\test\FixedEngine.Tests\bin\TestOutput";
+        static string FindProjectRoot()
+        {
+            DirectoryInfo dir = new DirectoryInfo(AppContext.BaseDirectory);
+
+            while (dir != null)
+            {
+                if (dir.GetFiles("*.csproj").Length > 0)
+                    return dir.FullName;
+
+                dir = dir.Parent!;
+            }
+
+            throw new Exception("Impossible de trouver le projet.");
+        }
+
+        string projectRoot = FindProjectRoot();
+        string root = Path.Combine(projectRoot, "TestOutput");
+
         Directory.CreateDirectory(root);
 
         string filename = Path.Combine(root, $"sin_{bitsType.Name}.csv");
@@ -144,20 +118,4 @@ public class CurveGenerator
 
 }
 
-
-public class CurveGeneratorTests
-{
-    [Test, Explicit]
-    public void GenerateSinCsv()
-    {
-        CurveGenerator.GenerateAndSaveSinCurve(
-            samples: 100,
-            rangeQ16: 65534,
-            filename: "sine_curve.csv",
-            includeReference: true
-        );
-    }
-
-
-}
 

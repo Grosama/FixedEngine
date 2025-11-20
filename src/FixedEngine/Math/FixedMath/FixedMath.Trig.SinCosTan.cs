@@ -29,100 +29,66 @@ namespace FixedEngine.Math
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int BezierSin(int y0, int y1, int y2, int y3, int tQ16)
+        static int CatmullAdaptiveQ31(int p0, int p1, int p2, int p3, int tQ16, int quadrant)
         {
-            // K = tension (0.0 .. 1.0)
-            const int K_Q16 = (int)(0.85 * 65536); // K = 0.85
-
-            // Compute control points C1, C2
-            int d1 = y2 - y0;
-            int d2 = y3 - y1;
-
-            // (K/6) in Q16 is K_Q16 / 6
-            int k6 = K_Q16 / 6;
-
-            int C1 = y1 + (int)(((long)d1 * k6) >> 16);
-            int C2 = y2 - (int)(((long)d2 * k6) >> 16);
-
-            int t = tQ16;
-            int inv = 65536 - t;
-
-            long inv2 = (long)inv * inv >> 16;
-            long inv3 = inv2 * inv >> 16;
-
-            long t2 = (long)t * t >> 16;
-            long t3 = t2 * t >> 16;
-
-            long term1 = inv3 * y1 >> 16;
-            long term2 = 3 * ((inv2 * t) >> 16) * C1 >> 16;
-            long term3 = 3 * ((inv * t2) >> 16) * C2 >> 16;
-            long term4 = t3 * y2 >> 16;
-
-            return (int)(term1 + term2 + term3 + term4);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        static int CatmullAdaptiveQ16(int p0, int p1, int p2, int p3, int tQ16, int quadrant)
-        {
-            // tension T = 1.0 pour Q0,Q3 (Catmull standard),
-            // tension T = 0.70 pour Q1,Q2 (zones délicates)
-            // On simule tension en réduisant les tangentes
-            const int T_std_Q16 = 65536;         // 1.0
-            const int T_soft_Q16 = (int)(0.70 * 65536);
+            // Tension :
+            // - Quadrants 0 & 3 : proche de Catmull standard (un peu adouci)
+            // - Quadrants 1 & 2 : tension plus soft pour limiter les overshoots
+            const int T_std_Q16 = (int)(0.90 * 65536);  // 0.90 en Q16.16
+            const int T_soft_Q16 = (int)(0.55 * 65536);  // 0.55 en Q16.16
 
             int T = ((quadrant & 1) == 0) ? T_std_Q16 : T_soft_Q16;
 
-            // Tangentes atténuées : m1 = 0.5*(p2 - p0)*T ; m2 = 0.5*(p3 - p1)*T
-            long m1 = ((long)(p2 - p0) * T) >> 17;  // >>17 = /2 puis /65536
-            long m2 = ((long)(p3 - p1) * T) >> 17;
+            // Tangentes en Q1.31
+            // m = 0.5 * (p2 - p0) * T
+            // Q1.31 * Q16.16 = Q17.47 → >>16 pour revenir en Q1.31
+            // et /2 → >>1, donc >>17 au total
+            long d10 = (long)(p2 - p0);
+            long d23 = (long)(p3 - p1);
 
+            long m1 = (d10 * T + (1L << 16)) >> 17; // arrondi
+            long m2 = (d23 * T + (1L << 16)) >> 17;
+
+            // t, t², t³ en Q16.16
             int t = tQ16;
-            int t2 = (t * t) >> 16;
-            int t3 = (t2 * t) >> 16;
+            int t2 = (int)(((long)t * t + (1L << 15)) >> 16);
+            int t3 = (int)(((long)t2 * t + (1L << 15)) >> 16);
 
-            // Hermite:
-            // h = (2t³ - 3t² + 1)*p1 + (t³ - 2t² + t)*m1 + (-2t³ + 3t²)*p2 + (t³ - t²)*m2
-            long h1 = ((2L * t3 - 3L * t2 + 65536L) * p1) >> 16;
-            long h2 = ((t3 - 2L * t2 + t) * m1) >> 16;
-            long h3 = ((-2L * t3 + 3L * t2) * p2) >> 16;
-            long h4 = ((t3 - t2) * m2) >> 16;
+            // Coeffs Hermite en Q16.16
+            // h1(t) =  2t³ - 3t² + 1
+            // h2(t) =    t³ - 2t² + t
+            // h3(t) = -2t³ + 3t²
+            // h4(t) =    t³ -   t²
+            long h1c = 2L * t3 - 3L * t2 + 65536L;
+            long h2c = t3 - 2L * t2 + t;
+            long h3c = -2L * t3 + 3L * t2;
+            long h4c = t3 - t2;
 
-            return (int)(h1 + h2 + h3 + h4);
+            // Combinaison : tout en Q1.31 (arrondi à chaque étape)
+            long h1 = (h1c * p1 + (1L << 15)) >> 16;
+            long h2 = (h2c * m1 + (1L << 15)) >> 16;
+            long h3 = (h3c * p2 + (1L << 15)) >> 16;
+            long h4 = (h4c * m2 + (1L << 15)) >> 16;
+
+            long res = h1 + h2 + h3 + h4;
+
+            // Clamp “monotone” local pour éviter les overshoots
+            int minLocal = p1 < p2 ? p1 : p2;
+            int maxLocal = p1 > p2 ? p1 : p2;
+
+            if (res < minLocal) res = minLocal;
+            if (res > maxLocal) res = maxLocal;
+
+            // Clamp global Q1.31 par sécurité
+            if (res > int.MaxValue) return int.MaxValue;
+            if (res < int.MinValue) return int.MinValue;
+
+            return (int)res;
         }
 
 
-        /*[MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static int CatmullUniformQ16(int y0, int y1, int y2, int y3, int fracQ16)
-        {
-            // Catmull-Rom standard (paramétrisation uniforme) en Q16.16
-            long a0 = (-y0 + 3L * y1 - 3L * y2 + y3) >> 1;
-            long a1 = (2L * y0 - 5L * y1 + 4L * y2 - y3) >> 1;
-            long a2 = (y2 - y0) >> 1;
-            long a3 = y1;
-
-            long t = fracQ16;
-            long t2 = (t * t) >> 16;
-            long t3 = (t2 * t) >> 16;
-
-            long r = (a0 * t3 + a1 * t2 + a2 * t + (a3 << 16)) >> 16;
-            return (int)r;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static int CatmullMonotoneQ16(int y0, int y1, int y2, int y3, int fracQ16)
-        {
-            int v = CatmullUniformQ16(y0, y1, y2, y3, fracQ16);
-
-            // clamp pour éviter les overshoots entre y1 et y2
-            int lo = y1 < y2 ? y1 : y2;
-            int hi = y1 > y2 ? y1 : y2;
-
-            if (v < lo) v = lo;
-            else if (v > hi) v = hi;
-
-            return v;
-        }*/
         #endregion
+
 
         // ==========================
         // --- SIN/COS/TAN LUT Retro ---
@@ -132,82 +98,189 @@ namespace FixedEngine.Math
         //----- SIN -----
         #region --- SINCORE LUT Retro ---
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static int SinCore(uint uraw, int bits)
+        public static int SinCore(uint uraw, int bits)
         {
-            const int lutBits = 12;
-            var lut = SinLUT4096.LUT;
+            // --- Configuration ---
+            const int LUT_SIZE = 4096;
+            var sinLUT = SinLUT4096.LUT;         // Valeurs sin en Q1.31
+            var angleLUT = SinAngleLUT4096.LUT;  // Angles en Q16.16 (0..65536)
+            var phaseMap = PhaseToIndex;         // Mapping phase→index
 
+            // --- Extraction quadrant + phase ---
             int phaseBits = bits - 2;
-            uint phaseMask = (phaseBits == 0) ? 0u : (1u << phaseBits) - 1u;
+            if (phaseBits < 0) phaseBits = 0;
+
+            uint phaseMask = phaseBits >= 32 ? 0xFFFFFFFFu : ((1u << phaseBits) - 1u);
             uint phase = uraw & phaseMask;
+            int quadrant = (int)(uraw >> phaseBits) & 0b11;
 
-            // Quadrant sur les 2 bits de poids fort
-            int quadrant = (int)(uraw >> (bits - 2)) & 0b11;
-            int sign = ((quadrant & 0b10) == 0) ? 1 : -1;
+            // --- Signe selon quadrant ---
+            int sign = (quadrant & 2) == 0 ? 1 : -1;
 
-            const int lutMask = (1 << lutBits) - 1;
-            int fracBits = phaseBits - lutBits;
-
-            // ----- CALCUL INDEX & FRACTION -----
-            int idx, tQ16;
-
-            if (fracBits <= 0)
+            // --- Normalisation phase → Q16.16 (0..65536 = 0°..90°) ---
+            int phaseQ16;
+            if (phaseBits == 0)
             {
-                // B2..B14: LUT direct
-                idx = (int)(phase << (-fracBits));
-                tQ16 = 0;
+                phaseQ16 = 0; // B2 : pas de phase
             }
-            else if (bits == 15)
+            else if (phaseBits <= 16)
             {
-                // B15: mapping haute précision
-                int phaseMax = (1 << phaseBits) - 1;
-                long idxQ16 = ((long)phase << 16) * lutMask / phaseMax;
-                idx = (int)(idxQ16 >> 16);
-                tQ16 = (int)(idxQ16 & 0xFFFF);
+                phaseQ16 = (int)(phase << (16 - phaseBits));
             }
             else
             {
-                // B16+: mapping standard
-                idx = (int)(phase >> fracBits);
-                uint tMask = (1u << fracBits) - 1u;
-                int tFrac = (int)(phase & tMask);
-                int shift = 16 - fracBits;
-                tQ16 = (shift >= 0) ? (tFrac << shift) : (tFrac >> (-shift));
+                phaseQ16 = (int)(phase >> (phaseBits - 16));
             }
 
-            // Clamp & symétrie
-            idx = Max(0, Min(lutMask, idx));
-            int lutIdx = ((quadrant & 1) == 0) ? idx : lutMask - idx;
-            lutIdx = Max(0, Min(lutMask, lutIdx));
+            // Clamp sécurité
+            if (phaseQ16 < 0) phaseQ16 = 0;
+            if (phaseQ16 > 65536) phaseQ16 = 65536;
 
-            // Voisinage
-            int p0 = Max(0, lutIdx - 1);
-            int p1 = lutIdx;
-            int p2 = Min(lutMask, lutIdx + 1);
-            int p3 = Min(lutMask, lutIdx + 2);
+            // --- CORRECTION : Appliquer symétrie AVANT mapping ---
+            // Quadrants 1 et 3 : symétrie sin(π/2 - θ) = sin(π/2 - (π/2 - θ)) = sin(θ)
+            // On inverse la phase : 90° - θ
+            if ((quadrant & 1) != 0)
+            {
+                phaseQ16 = 65536 - phaseQ16;
+            }
 
-            // Interpolation
-            int q16_16 = (fracBits <= 0)
-                ? sign * lut[lutIdx]
-                : sign * CatmullAdaptiveQ16(lut[p0], lut[p1], lut[p2], lut[p3], tQ16, quadrant);
+            // --- Mapping phase→index LUT via recherche binaire ---
+            int idx = BinarySearchAngle(angleLUT, phaseQ16);
 
-            return Q16_16ToBn(q16_16, bits);
+            // Clamp index
+            if (idx < 0) idx = 0;
+            if (idx >= LUT_SIZE - 1) idx = LUT_SIZE - 2;
+
+            // --- Calcul du facteur d'interpolation t ---
+            int angle0 = angleLUT[idx];
+            int angle1 = angleLUT[idx + 1];
+            int deltaAngle = angle1 - angle0;
+
+            int tQ16;
+            if (deltaAngle <= 0)
+            {
+                tQ16 = 0; // Sécurité division par zéro
+            }
+            else
+            {
+                // t = (phaseQ16 - angle0) / (angle1 - angle0)
+                long num = (long)(phaseQ16 - angle0) << 16;
+                tQ16 = (int)(num / deltaAngle);
+
+                // Clamp t ∈ [0, 65536]
+                if (tQ16 < 0) tQ16 = 0;
+                if (tQ16 > 65536) tQ16 = 65536;
+            }
+
+            // --- Interpolation Catmull-Rom ---
+            int p0 = Max(0, idx - 1);
+            int p1 = idx;
+            int p2 = Min(LUT_SIZE - 1, idx + 1);
+            int p3 = Min(LUT_SIZE - 1, idx + 2);
+
+            int resultQ31 = CatmullRomQ31(
+                sinLUT[p0],
+                sinLUT[p1],
+                sinLUT[p2],
+                sinLUT[p3],
+                tQ16
+            );
+
+            // Appliquer le signe
+            if (sign < 0) resultQ31 = -resultQ31;
+
+            // --- Conversion Q1.31 → Bn ---
+            return Q31ToBn(resultQ31, bits);
+        }
+
+
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int CatmullRomQ31(int p0, int p1, int p2, int p3, int tQ16)
+        {
+
+            long t = tQ16;
+            long t2 = (t * t) >> 16;
+            long t3 = (t2 * t) >> 16;
+
+            // Coefficients en fixed-point (multipliés par 2 pour éviter 0.5)
+            long a = -p0 + 3 * (long)p1 - 3 * (long)p2 + p3;
+            long b = 2 * (long)p0 - 5 * (long)p1 + 4 * (long)p2 - p3;
+            long c = -p0 + p2;
+            long d = 2 * (long)p1;
+
+            // result = (a*t³ + b*t² + c*t + d) / 2
+            long result = ((a * t3) >> 16) + ((b * t2) >> 16) + ((c * t) >> 16) + d;
+            result >>= 1; // Division par 2 finale
+
+            // Clamp Q1.31
+            if (result > int.MaxValue) result = int.MaxValue;
+            if (result < int.MinValue) result = int.MinValue;
+
+            return (int)result;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int Q16_16ToBn(int q16_16, int bits)
+        private static int BinarySearchAngle(int[] angleLUT, int phaseQ16)
+        {
+            int left = 0;
+            int right = angleLUT.Length - 1;
+
+            while (left < right)
+            {
+                int mid = (left + right + 1) >> 1;
+                if (angleLUT[mid] <= phaseQ16)
+                    left = mid;
+                else
+                    right = mid - 1;
+            }
+
+            return left;
+        }
+
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static int Q31ToBn(int q31, int bits)
         {
             int max = (1 << (bits - 1)) - 1;
             int min = -(1 << (bits - 1));
 
+            // Scale : q31 * max / MaxQ31
+            long tmp = (long)q31 * max;
+            tmp += (1L << 30); // Arrondi
+            int val = (int)(tmp >> 31);
 
-            long tmp = (long)q16_16 * (long)max + (1L << 15);
-            int val = (int)(tmp >> 16);
-
+            // Clamp
             if (val < min) val = min;
             if (val > max) val = max;
-            return val;
 
+            return val;
+        }
+
+        private static readonly ushort[] PhaseToIndex =
+            BuildPhaseToIndex(SinAngleLUT4096.LUT);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static ushort[] BuildPhaseToIndex(int[] angleQ16)
+        {
+            int len = angleQ16.Length;
+            ushort[] map = new ushort[4096];
+
+            int i = 0;
+            for (int p = 0; p < 4096; p++)
+            {
+                int phaseNormQ16 = (int)(((long)p * 65536 + 2048) / 4095);
+
+                while (i + 1 < len && angleQ16[i + 1] <= phaseNormQ16)
+                    i++;
+
+                if (i < 0) i = 0;
+                if (i >= len) i = len - 1;
+
+                map[p] = (ushort)i;
+            }
+
+            return map;
         }
         #endregion
 
@@ -448,7 +521,7 @@ namespace FixedEngine.Math
                 throw new NotSupportedException(
                     $"FixedMath.Tan n'est pas défini pour Bn={bits} (min: B2).");
 
-            return Q16_16ToBn(TanCore(angle.Raw, bits), bits);
+            return Q31ToBn(TanCore(angle.Raw, bits), bits);
         }
         #endregion
 
@@ -464,7 +537,7 @@ namespace FixedEngine.Math
 
             //uint uraw = (uint)angle.Raw & ((1u << bits) - 1);
             uint uraw = (uint)angle.Raw &  (MaskQ<TBits>() - 1);
-            return Q16_16ToBn(TanCore(uraw, bits), bits);
+            return Q31ToBn(TanCore(uraw, bits), bits);
         }
         #endregion
 
@@ -480,7 +553,7 @@ namespace FixedEngine.Math
                 throw new NotSupportedException(
                     $"FixedMath.Tan n'est pas défini pour Bn={bits} (min: B2).");
 
-            return Q16_16ToBn(TanCore(angle.Raw, bits), bits);
+            return Q31ToBn(TanCore(angle.Raw, bits), bits);
         } 
         #endregion
 
@@ -497,7 +570,7 @@ namespace FixedEngine.Math
 
             //uint uraw = (uint)angle.Raw & ((1u << bits) - 1);
             uint uraw = (uint)angle.Raw & (MaskQ<TInt>() - 1);
-            return Q16_16ToBn(TanCore(uraw, bits), bits);
+            return Q31ToBn(TanCore(uraw, bits), bits);
 
         }
         #endregion

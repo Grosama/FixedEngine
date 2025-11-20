@@ -3,6 +3,7 @@ bin/
 obj/
 out/
 TestResults/
+TestOutput/
 
 # User-specific files
 *.user
